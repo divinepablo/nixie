@@ -1,0 +1,146 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Nixie",
+	"patterns": [
+		{
+			"include": "#comments"
+		},
+		{
+			"include": "#preprocessor"
+		},
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"name": "constant.numeric.nixie",
+			"match": "\\b0x[0-9A-Fa-f]+\\b|\\b\\d+\\b"
+		},
+		{
+			"name": "constant.language.nixie",
+			"match": "\\b(true|false)\\b"
+		},
+		{
+			"include": "#types"
+		},
+		{
+			"include": "#structures"
+		},
+		{
+			"include": "#functions"
+		}
+	],
+	"repository": {
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.line.double-slash.nixie",
+					"begin": "//",
+					"end": "$\\n?"
+				},
+				{
+					"name": "comment.block.nixie",
+					"begin": "/\\*",
+					"end": "\\*/"
+				}
+			]
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.nixie",
+					"match": "\\b(if|while|for|return)\\b"
+				},
+				{
+					"name": "storage.type.nixie",
+					"match": "\\b(var|const)\\b"
+				},
+				{
+					"name": "storage.modifier.nixie",
+					"match": "\\b(__zeropage|__interrupt)\\b"
+				}
+			]
+		},
+		"types": {
+			"patterns": [
+				{
+					"name": "storage.type.numeric.v",
+					"match": "(?<!\\.)\\b(i(8|16|32|64)|u(8|16|32|64))\\b"
+				},
+				{
+					"name": "storage.type.$1.v",
+					"match": "(?<!\\.)\\b(bool|str)\\b"
+				}
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.nixie",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.nixie",
+					"match": "\\\\."
+				}
+			]
+		},
+		"preprocessor": {
+			"name": "meta.preprocessor.definition.nixie",
+			"patterns": [
+				{
+					"match": "^\\s*#\\s*(define)\\s*(\\w+)",
+					"captures": {
+						"1": {
+							"name": "keyword.control.directive.nixie"
+						},
+						"2": {
+							"name": "entity.name.function.preprocessor.nixie"
+						}
+					}
+				}
+			]
+		},
+		"structures": {
+			"patterns": [
+				{
+					"name": "meta.definition.struct.nixie",
+					"begin": "\\b(struct)\\s+(\\w+)\\s+{",
+					"end": "\\s*}",
+					"beginCaptures": {
+						"1": {
+							"name": "storage.type.struct.nixie"
+						},
+						"2": {
+							"name": "entity.name.type.struct.nixie"
+						}
+					}
+				}
+			]
+		},
+		"functions": {
+            "begin": "\\b(fn)\\s+(\\w+)\\s*(\\()",
+            "beginCaptures": {
+                "1": { "name": "storage.type.function.nixie" },
+                "2": { "name": "entity.name.function.nixie" },
+                "3": { "name": "punctuation.definition.parameters.begin.nixie" }
+            },
+            "end": "(\\))",
+            "endCaptures": {
+                "1": { "name": "punctuation.definition.parameters.end.nixie" }
+            },
+            "patterns": [
+                {
+                    "match": "(\\w+)\\s*(:)",
+                    "captures": {
+                        "1": { "name": "variable.parameter.nixie" },
+                        "2": { "name": "punctuation.separator.key-value.nixie" }
+                    }
+                },
+                { "include": "#types" }
+            ]
+        }
+	},
+	"scopeName": "source.nixie"
+}

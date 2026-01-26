@@ -1,0 +1,29 @@
+{
+  "name": "nixie-lang",
+  "displayName": "Nixie Language Support",
+  "description": "Programming language that compiles to 65c02 assembly",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.108.1"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "nixie",
+      "aliases": ["Nixie", "nixie"],
+      "extensions": [".nxe",".nxi"],
+      "configuration": "./language-configuration.json",
+      "icon": {
+        "dark": "./icon.png",
+        "light": "./icon.png"
+      }
+    }],
+    "grammars": [{
+      "language": "nixie",
+      "scopeName": "source.nixie",
+      "path": "./syntaxes/nixie.tmLanguage.json"
+    }]
+  }
+}
