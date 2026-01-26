@@ -1,0 +1,68 @@
+// 1. Preprocessor Definitions & Imports
+#include "hardware/registers.nxi"
+
+#define MAX_SPEED 5
+#define SCREEN_WIDTH 240
+
+// 2. Structures
+struct Vector2 {
+    x: u8,
+    y: u8
+}
+
+struct Sprite {
+    pos: Vector2,
+    id: u8,
+    active: bool
+}
+
+// 3. Variables & Zero Page Declaration
+__zeropage var frame_count: u8 = 0;           // High-speed ZP access
+var player: Sprite = {                // Standard RAM
+    pos: { x: 10, y: 10 }, 
+    id: 1, 
+    active: true 
+}
+
+// 4. Strings (Null-terminated)
+const DEBUG_MSG: str = "SPRITE_ACTIVE";
+
+// 5. First-Class Functions (Function Pointers)
+var on_move_callback: fn(u8, u8);
+
+// 6. Functions
+fn update_position(new_x: u8, new_y: u8) {
+    if (new_x < SCREEN_WIDTH) {
+        player.pos.x = new_x;
+        player.pos.y = new_y;
+    }
+    
+    // Calling the function pointer if assigned
+    if (on_move_callback != 0) {
+        on_move_callback(new_x, new_y);
+    }
+}
+
+fn log_move(x: u8, y: u8) {
+    // Logic for logging movement
+    var temp: u8 = x + y;
+}
+
+// 7. Interrupts
+__interrupt fn timer_irq() {
+    frame_count = frame_count + 1;
+    // The compiler automatically handles PHX/PHY/PHA and PLY/PLX/PLA/RTI
+}
+
+// 8. Main Entry Point
+fn main() {
+    // Assigning a first-class function
+    on_move_callback = log_move;
+    
+    while (player.active) {
+        if (frame_count > 60) {
+            update_position(player.pos.x + 1, player.pos.y);
+            frame_count = 0;
+        }
+    }
+}
