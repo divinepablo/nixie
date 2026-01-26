@@ -96,7 +96,7 @@ TEST(LexerTests, ParsesComparisonOperators) {
     const std::string source = "if (a == b) { return a >= b; }";
 
     expect_tokens(source, {
-        {Type::IDENTIFIER, "if"},
+        {Type::IF, "if"},
         {Type::OPEN_PAREN, "("},
         {Type::IDENTIFIER, "a"},
         {Type::EQUALS, "=="},
@@ -136,6 +136,46 @@ TEST(LexerTests, FunctionDeclaration) {
         {Type::TYPE_UNSIGNED_8, "u8"},
         {Type::CLOSE_PAREN, ")"},
         {Type::SEMICOLON, ";"},
+        {Type::END, ""},
+    });
+}
+
+TEST(LexerTests, WhileLoop) {
+    const std::string source = "while (i < 10) { i = i + 1; }";
+    expect_tokens(source, {
+        {Type::WHILE, "while"},
+        {Type::OPEN_PAREN, "("},
+        {Type::IDENTIFIER, "i"},
+        {Type::LESS_THAN, "<"},
+        {Type::NUMBER, "10"},
+        {Type::CLOSE_PAREN, ")"},
+        {Type::OPEN_BRACE, "{"},
+        {Type::IDENTIFIER, "i"},
+        {Type::ASSIGN, "="},
+        {Type::IDENTIFIER, "i"},
+        {Type::PLUS, "+"},
+        {Type::NUMBER, "1"},
+        {Type::SEMICOLON, ";"},
+        {Type::CLOSE_BRACE, "}"},
+        {Type::END, ""},
+    });
+}
+
+TEST(LexerTests, NotEqualOperator) {
+    const std::string source = "if (a != b) { do_something(); }";
+    expect_tokens(source, {
+        {Type::IF, "if"},
+        {Type::OPEN_PAREN, "("},
+        {Type::IDENTIFIER, "a"},
+        {Type::NOT_EQUAL, "!="},
+        {Type::IDENTIFIER, "b"},
+        {Type::CLOSE_PAREN, ")"},
+        {Type::OPEN_BRACE, "{"},
+        {Type::IDENTIFIER, "do_something"},
+        {Type::OPEN_PAREN, "("},
+        {Type::CLOSE_PAREN, ")"},
+        {Type::SEMICOLON, ";"},
+        {Type::CLOSE_BRACE, "}"},
         {Type::END, ""},
     });
 }

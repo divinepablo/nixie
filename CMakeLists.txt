@@ -30,6 +30,7 @@ include(FetchContent)
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/85087857ad10bd407cd6ed2f52f7ea9752db621f.zip
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 
 set(gtest_force_shared_crt
@@ -37,17 +38,17 @@ set(gtest_force_shared_crt
     CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(lexer_tests tests/lexer_tests.cpp src/lexer.cpp)
+add_executable(compiler_tests tests/lexer_tests.cpp tests/parser_tests.cpp src/lexer.cpp src/parser.cpp)
 
-target_include_directories(lexer_tests PRIVATE include)
+target_include_directories(compiler_tests PRIVATE include)
 if(MSVC)
-  target_compile_options(lexer_tests PRIVATE /WX-)
+  target_compile_options(compiler_tests PRIVATE /WX-)
 else()
-  target_compile_options(lexer_tests PRIVATE -Wno-error)
+  target_compile_options(compiler_tests PRIVATE -Wno-error)
 endif()
-target_link_libraries(lexer_tests PRIVATE GTest::gtest_main)
+target_link_libraries(compiler_tests PRIVATE GTest::gtest_main)
 include(GoogleTest)
-gtest_discover_tests(lexer_tests)
+gtest_discover_tests(compiler_tests)
 # endif()
 
 # 1. (Optional) External Libraries If you install {fmt} via 'sudo apt install

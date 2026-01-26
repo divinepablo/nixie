@@ -1,4 +1,5 @@
 #include <string_view>
+#include <string>
 #include <vector>
 
 enum class Type
@@ -13,6 +14,8 @@ enum class Type
     ZEROPAGE,
     NUMBER,
     STRING,
+    IF,
+    WHILE,
     IDENTIFIER,
     OPEN_PAREN,
     CLOSE_PAREN,
@@ -57,6 +60,7 @@ struct Token
 {
     Type type;
     std::string_view value; // No more std::string allocations per token
+    std::string to_string() const;
 };
 
 class Lexer
@@ -70,7 +74,6 @@ public:
 
 private:
     void skip_whitespace_and_comments();
-    std::string_view read_while(auto predicate);
     constexpr bool is_eof() const { return cursor >= source.length(); }
     constexpr char peek() const { return is_eof() ? '\0' : source[cursor]; }
     constexpr void advance() { cursor++; }

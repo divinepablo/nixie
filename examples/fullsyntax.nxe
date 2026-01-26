@@ -18,7 +18,7 @@ struct Sprite {
 
 // 3. Variables & Zero Page Declaration
 __zeropage var frame_count: u8 = 0;           // High-speed ZP access
-var player: Sprite = {                // Standard RAM
+var player: Sprite = {                        // Standard RAM
     pos: { x: 10, y: 10 }, 
     id: 1, 
     active: true 
@@ -28,7 +28,7 @@ var player: Sprite = {                // Standard RAM
 const DEBUG_MSG: str = "SPRITE_ACTIVE";
 
 // 5. First-Class Functions (Function Pointers)
-var on_move_callback: fn(u8, u8);
+// var on_move_callback: fn(u8, u8);
 
 // 6. Functions
 fn update_position(new_x: u8, new_y: u8) {
@@ -55,7 +55,7 @@ __interrupt fn timer_irq() {
 }
 
 // 8. Main Entry Point
-fn main() {
+__interrupt fn entry_point() {
     // Assigning a first-class function
     on_move_callback = log_move;
     

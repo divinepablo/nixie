@@ -69,6 +69,8 @@ std::vector<Token> Lexer::tokenize() {
             else if (word == "struct")      tokens.push_back({Type::STRUCT, word});
             else if (word == "fn")          tokens.push_back({Type::FUNCTION, word});
             else if (word == "var")         tokens.push_back({Type::VARIABLE, word});
+            else if (word == "if")          tokens.push_back({Type::IF, word});
+            else if (word == "while")       tokens.push_back({Type::WHILE, word});
             else if (word == "const")       tokens.push_back({Type::CONSTANT, word});
             else if (word == "__interrupt") tokens.push_back({Type::INTERRUPT, word});
             else if (word == "__zeropage")  tokens.push_back({Type::ZEROPAGE, word});
@@ -143,4 +145,9 @@ std::vector<Token> Lexer::tokenize() {
 
     tokens.push_back({Type::END, ""});
     return tokens;
+}
+
+std::string Token::to_string() const
+{
+    return "Token(Type: " + std::to_string(static_cast<int>(this->type)) + ", Value: \"" + std::string(this->value) + "\")\n";
 }
