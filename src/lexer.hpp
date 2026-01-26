@@ -1,23 +1,77 @@
 #include <string_view>
 #include <vector>
-#include <cctype>
 
-enum class Type { SET, ADD, NUMBER, END };
-
-struct Token {
-    Type type;
-    std::string_view value; // No allocation here!
+enum class Type
+{
+    DEFINE,
+    INCLUDE,
+    STRUCT,
+    FUNCTION,
+    VARIABLE,
+    CONSTANT,
+    INTERRUPT,
+    ZEROPAGE,
+    NUMBER,
+    STRING,
+    IDENTIFIER,
+    OPEN_PAREN,
+    CLOSE_PAREN,
+    OPEN_BRACE,
+    CLOSE_BRACE,
+    OPEN_BRACKET,
+    CLOSE_BRACKET,
+    COLON,
+    SEMICOLON,
+    COMMA,
+    PLUS,
+    MINUS,
+    ASTERISK,
+    SLASH,
+    EQUALS,
+    ASSIGN,
+    LESS_THAN,
+    GREATER_THAN,
+    LESS_THAN_EQUAL,
+    GREATER_THAN_EQUAL,
+    EXCLAIM,
+    NOT_EQUAL,
+    TYPE_UNSIGNED_8,
+    TYPE_UNSIGNED_16,
+    TYPE_UNSIGNED_32,
+    TYPE_UNSIGNED_64,
+    TYPE_SIGNED_8,
+    TYPE_SIGNED_16,
+    TYPE_SIGNED_32,
+    TYPE_SIGNED_64,
+    TYPE_BOOLEAN,
+    TYPE_STRING,
+    TRUE,
+    FALSE,
+    // QUOTE,
+    PERIOD,
+    END = -1,
+    UNKNOWN = -2, // should neva happen 
 };
 
-class Lexer {
+struct Token
+{
+    Type type;
+    std::string_view value; // No more std::string allocations per token
+};
+
+class Lexer
+{
     std::string_view source;
     size_t cursor = 0;
 
 public:
-    Lexer(std::string_view src) : source(src) {}
-    std::vector<Token> tokenize() {}
+    explicit Lexer(std::string_view src) : source(src) {}
+    std::vector<Token> tokenize();
+
 private:
-    void skip_whitespace();
-    Token read_identifier();
-    Token read_number();
+    void skip_whitespace_and_comments();
+    std::string_view read_while(auto predicate);
+    constexpr bool is_eof() const { return cursor >= source.length(); }
+    constexpr char peek() const { return is_eof() ? '\0' : source[cursor]; }
+    constexpr void advance() { cursor++; }
 };

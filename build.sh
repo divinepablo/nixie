@@ -17,6 +17,11 @@ if [ ! -d build ]; then
     echo "Added .gitignore to build directory"
 fi
 
+if [ ! -f "./build/.gitignore" ]; then
+    echo "*" >> build/.gitignore
+    echo "Added .gitignore to build directory"
+fi
+
 # Configure and build
 cd build
 echo "Running CMake configuration..."

@@ -14,7 +14,10 @@ REM Create build directory if it doesn't exist
 if not exist build (
     mkdir build
     echo Created build directory
-    echo "*" >> build/.gitignore
+)
+
+if not exist "build\.gitignore" (
+    echo * >> build/.gitignore
     echo Added .gitignore to build directory
 )
 

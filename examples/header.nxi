@@ -1,8 +1,8 @@
 // hardware.nxi - System-wide definitions
-#define VIA_PORTB $6000
-#define VIA_PORTA $6001
-#define VIA_DDRB  $6002
-#define VIA_DDRA  $6003
+#define VIA_PORTB 0x6000
+#define VIA_PORTA 0x6001
+#define VIA_DDRB  0x6002
+#define VIA_DDRA  0x6003
 
 // Structure template for a hardware-level Sprite
 // Note: In a header, we define the SHAPE, not the variable.
@@ -19,7 +19,3 @@ struct SpriteConfig {
 fn init_system();
 fn clear_screen(color: u8);
 fn set_sprite_attr(s: *SpriteConfig);
-
-// External Zero Page declarations
-// 'extern' tells the compiler the variable is defined in a .nx file
-extern zp var global_timer: u8;
