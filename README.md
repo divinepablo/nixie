@@ -2,6 +2,8 @@
 
 a language made to compile to 65c02 machine code
 
+### uh guys i dont know why its saying ac1dbitches is commiting i wrote everything 
+
 ## features
 
 * [ ] functions
