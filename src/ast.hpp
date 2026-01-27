@@ -3,7 +3,7 @@
 #include <vector>
 #include <map>
 #include <memory>
-
+#include "lexer.hpp"
 enum class Operator
 {
     ADD = 1,
@@ -209,8 +209,8 @@ struct StringNode : Node
 
 struct NumberNode : Node
 {
-    int value;
-    explicit NumberNode(int val) : value(val) {}
+    std::int32_t value;
+    explicit NumberNode(std::int32_t val) : value(val) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
 

@@ -1,18 +1,15 @@
 #include "lexer.hpp"
 #include "ast.hpp"
+#include "o65.hpp"
 #include <vector>
 #include <map>
 #include <string>
 #include <cstdint>
 
-// i asked big gemi what i should add to da header
-
-
 class CodegenVisitor : public Visitor
 {
+private:
 public:
-    // const std::vector<uint8_t>& getCode() const { return code; }
-
     void visit(Node &node) override;
     void visit(IncludeNode &node) override;
     void visit(DefineNode &node) override;

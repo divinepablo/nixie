@@ -50,7 +50,7 @@ public:
     constexpr AstType parseType(Token typing);
     std::unique_ptr<Node> parseExpression();
 
-    int parseNumber();
+    std::int32_t parseNumber();
     std::unique_ptr<StringNode> parseString();
     bool parseBoolean();
     std::unique_ptr<CallNode> parseCall();

@@ -61,7 +61,7 @@ constexpr AstType Parser::parseType(Token typing)
     return ret;
 }
 
-int Parser::parseNumber() // thanks gpt
+std::int32_t Parser::parseNumber() // thanks gpt
 {
     std::string_view sv = currentToken.value;
     consume(Type::NUMBER);
@@ -114,7 +114,7 @@ int Parser::parseNumber() // thanks gpt
     std::size_t pos = 0;
     try
     {
-        int value = std::stoi(clean, &pos, base);
+        long value = std::stol(clean, &pos, base);
         if (pos != clean.size())
             throw std::runtime_error("Invalid numeric literal");
         return value;
