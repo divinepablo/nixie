@@ -1,20 +1,8 @@
+#pragma once
 #include <string_view>
 #include <vector>
 #include <map>
 #include <memory>
-
-class Visitor; // Forward declaration
-struct IncludeNode;
-struct DefineNode;
-struct StringNode;
-struct NumberNode;
-struct BoolNode;
-struct AssignmentNode;
-struct BinaryOperationNode;
-struct ComparisonNode;
-struct FunctionNode;
-struct StructureNode;
-struct VariableNode;
 
 enum class Operator
 {
@@ -29,6 +17,9 @@ enum class UnaryOperator
 {
     NOT = 1,
     NEGATE,
+    DEREFERENCE,
+    REFERENCE,
+    UNKNOWN,
 }; // this language's syntax is odd.
 
 enum class TypeKind // thanks big gemi
@@ -47,20 +38,58 @@ enum class TypeKind // thanks big gemi
     UNKNOWN = -1,
 };
 
+class Visitor; // Forward declaration
+struct IncludeNode;
+struct DefineNode;
+struct StringNode;
+struct NumberNode;
+struct BoolNode;
+struct AssignmentNode;
+struct BinaryOperationNode;
+struct ComparisonNode;
+struct FunctionNode;
+struct StructureNode;
+struct StructureInitNode;
+struct VariableNode;
+struct ReferenceNode;
+struct CallNode;
+struct IfNode;
+struct UnaryNode;
+struct WhileNode;
+struct MemberReferenceNode;
+
 // 2. Create the unified Type struct
 struct AstType {
     TypeKind kind;
     std::string_view name; // Only used if kind == TypeKind::STRUCTURE
+    unsigned int pointerLevel = 0; // 0 = not a pointer, 1 = T*, 2 = T**, ...
 
     // Helpers to make creation easier
-    static AstType Primitive(const TypeKind k) { _ASSERT(k != TypeKind::STRUCTURE); return { k, "" }; }
-    static AstType Struct(std::string_view name) { return { TypeKind::STRUCTURE, name }; }
-    
-    // Allow comparing directly against the enum for convenience
+    static constexpr AstType Primitive(const TypeKind k, unsigned int ptr = 0) { return { k, "", ptr }; }
+    static constexpr AstType Struct(std::string_view n, unsigned int ptr = 0) { return { TypeKind::STRUCTURE, n, ptr }; }
+    static constexpr AstType PointerTo(const AstType& base, unsigned int levels = 1) {
+        AstType t = base;
+        t.pointerLevel += levels;
+        return t;
+    }
+
+    bool isPointer() const { return pointerLevel > 0; }
+    AstType decayPointer(unsigned int levels = 1) const {
+        AstType t = *this;
+        t.pointerLevel = (t.pointerLevel > levels) ? (t.pointerLevel - levels) : 0;
+        return t;
+    }
+
+    // Equality compares full type (including pointer level and struct name)
+    bool operator==(const AstType& other) const {
+        return kind == other.kind && name == other.name && pointerLevel == other.pointerLevel;
+    }
+    bool operator!=(const AstType& other) const { return !(*this == other); }
+
+    // Convenience: compare base kind (ignores pointer level and struct name)
     bool operator==(TypeKind k) const { return kind == k; }
     bool operator!=(TypeKind k) const { return kind != k; }
 };
-
 
 enum class Comparison
 {
@@ -87,13 +116,20 @@ public:
     virtual void visit(DefineNode &node) = 0;
     virtual void visit(StringNode &node) = 0;
     virtual void visit(NumberNode &node) = 0;
+    virtual void visit(UnaryNode &node) = 0;
     virtual void visit(BoolNode &node) = 0;
     virtual void visit(AssignmentNode &node) = 0;
     virtual void visit(BinaryOperationNode &node) = 0;
     virtual void visit(ComparisonNode &node) = 0;
     virtual void visit(FunctionNode &node) = 0;
     virtual void visit(StructureNode &node) = 0;
+    virtual void visit(StructureInitNode &node) = 0;
     virtual void visit(VariableNode &node) = 0;
+    virtual void visit(ReferenceNode &node) = 0;
+    virtual void visit(CallNode &node) = 0;
+    virtual void visit(IfNode &node) = 0;
+    virtual void visit(WhileNode &node) = 0;
+    virtual void visit(MemberReferenceNode &node) = 0;
 };
 
 constexpr Comparison tokenToComparison(const Token token) {
@@ -118,6 +154,16 @@ constexpr Operator tokenToOperator(const Token token) {
     }
 }
 
+constexpr UnaryOperator tokenToUnary(const Token token) {
+    switch (token.type) {
+        case Type::EXCLAIM  : return UnaryOperator::NOT         ;
+        case Type::MINUS    : return UnaryOperator::NEGATE      ;
+        case Type::HASH     : return UnaryOperator::REFERENCE   ;
+        case Type::AT       : return UnaryOperator::DEREFERENCE ;
+        default             : return UnaryOperator::UNKNOWN     ;
+    }
+}
+
 struct IncludeNode : Node
 {
     std::unique_ptr<StringNode> value;
@@ -129,6 +175,13 @@ struct ReferenceNode : Node
 {
     std::string_view name;
     explicit ReferenceNode(std::string_view val) : name(val) {}
+    void accept(Visitor &v) override { v.visit(*this); }
+};
+struct MemberReferenceNode : Node
+{
+    std::unique_ptr<Node> base;
+    std::string_view memberName;
+    explicit MemberReferenceNode(std::unique_ptr<ReferenceNode> base, std::string_view val) : base(std::move(base)), memberName(val) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
 struct CallNode : Node
@@ -207,8 +260,9 @@ struct FunctionNode : Node
     std::string_view name;
     std::map<std::string_view, AstType> parameters;
     std::vector<std::unique_ptr<Node>> body;
-    bool interrupt;
-    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, std::vector<std::unique_ptr<Node>> nodes, bool interrupt = false) : name(id), parameters(std::move(parameters)), body(std::move(nodes)), interrupt(interrupt) {}
+    bool interrupt, defined;
+    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, std::vector<std::unique_ptr<Node>> nodes, bool interrupt = false) : name(id), parameters(std::move(parameters)), body(std::move(nodes)), defined(true), interrupt(interrupt) {}
+    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, bool interrupt = false) : name(id), parameters(std::move(parameters)), defined(false), interrupt(interrupt) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
 
@@ -235,14 +289,21 @@ struct StructureNode : Node
     explicit StructureNode(std::string_view id, std::map<std::string_view, AstType> members) : name(id), members(std::move(members)) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
+struct StructureInitNode : Node
+{
+    std::map<std::string_view, std::unique_ptr<Node>> members;
+    explicit StructureInitNode(std::map<std::string_view, std::unique_ptr<Node>> members) : members(std::move(members)) {}
+    void accept(Visitor &v) override { v.visit(*this); }
+};
 
 struct VariableNode : Node
 {
     std::string_view name;
     AstType type;
     std::unique_ptr<Node> value;
+    bool constant;
     bool zeropaged;
     std::string_view structureName;
-    explicit VariableNode(std::string_view identifier, AstType type, std::unique_ptr<Node> expr, bool zeropage = false, std::string_view structName = "") : name(identifier), type(type), value(std::move(expr)), zeropaged(zeropage), structureName(structName) {}
+    explicit VariableNode(std::string_view identifier, AstType type, std::unique_ptr<Node> expr, bool constant = false, bool zeropage = false, std::string_view structName = "") : name(identifier), type(type), value(std::move(expr)), constant(constant), zeropaged(zeropage), structureName(structName) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };

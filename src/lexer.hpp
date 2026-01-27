@@ -1,3 +1,4 @@
+#pragma once
 #include <string_view>
 #include <string>
 #include <vector>
@@ -38,6 +39,8 @@ enum class Type
     GREATER_THAN_EQUAL,
     EXCLAIM,
     NOT_EQUAL,
+    AT,
+    HASH,
     TYPE_UNSIGNED_8,
     TYPE_UNSIGNED_16,
     TYPE_UNSIGNED_32,
@@ -48,6 +51,7 @@ enum class Type
     TYPE_SIGNED_64,
     TYPE_BOOLEAN,
     TYPE_STRING,
+    TYPE_PTR,
     TRUE,
     FALSE,
     // QUOTE,

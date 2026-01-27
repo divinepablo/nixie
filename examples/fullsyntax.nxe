@@ -1,8 +1,8 @@
 // 1. Preprocessor Definitions & Imports
 #include "hardware/registers.nxi"
 
-#define MAX_SPEED 5
-#define SCREEN_WIDTH 240
+// #define MAX_SPEED 5
+// #define SCREEN_WIDTH 240
 
 // 2. Structures
 struct Vector2 {
@@ -24,8 +24,10 @@ var player: Sprite = {                        // Standard RAM
     active: true 
 }
 
+__zeropage var speed_ptr: ptr[u8] = #MAX_SPEED;        
+
 // 4. Strings (Null-terminated)
-const DEBUG_MSG: str = "SPRITE_ACTIVE";
+const var DEBUG_MSG: str = "SPRITE_ACTIVE";
 
 // 5. First-Class Functions (Function Pointers)
 // var on_move_callback: fn(u8, u8);
@@ -33,8 +35,9 @@ const DEBUG_MSG: str = "SPRITE_ACTIVE";
 // 6. Functions
 fn update_position(new_x: u8, new_y: u8) {
     if (new_x < SCREEN_WIDTH) {
-        player.pos.x = new_x;
-        player.pos.y = new_y;
+        var position: ptr[Vector2] = #player.pos;
+        (@pos).x = new_x;
+        (@pos).y = new_y;
     }
     
     // Calling the function pointer if assigned
@@ -58,7 +61,7 @@ __interrupt fn timer_irq() {
 __interrupt fn entry_point() {
     // Assigning a first-class function
     on_move_callback = log_move;
-    
+    @speed_ptr = 3; // Setting speed via pointer
     while (player.active) {
         if (frame_count > 60) {
             update_position(player.pos.x + 1, player.pos.y);

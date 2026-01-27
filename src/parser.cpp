@@ -1,34 +1,64 @@
 #include "parser.hpp"
 #include <memory>
+
+const AstType Parser::parsePointer(Token typing)
+{
+    consume(typing.type);
+    consume(Type::OPEN_BRACKET);
+    if (currentToken.type == Type::TYPE_PTR)
+        throw std::runtime_error("Invalid syntax: ptr[ptr]");
+    auto base = parseType(currentToken);
+    int level = 1;
+    if (currentToken.type == Type::COMMA) {
+        consume(Type::COMMA);
+        level = parseNumber();
+        
+        if (level < 1)
+            throw std::runtime_error("Invalid syntax: pointer level cannot be lower than 1");
+    }
+
+    consume(Type::CLOSE_BRACKET);
+    return AstType::PointerTo(base, level);
+}
 constexpr AstType Parser::parseType(Token typing)
 {
+    AstType ret = AstType::Primitive(TypeKind::UNKNOWN);
     switch (typing.type)
     {
     case Type::TYPE_UNSIGNED_8:
-        return AstType::Primitive(TypeKind::UNSIGNED_8);
+        ret = AstType::Primitive(TypeKind::UNSIGNED_8);
+        break;
     case Type::TYPE_UNSIGNED_16:
-        return AstType::Primitive(TypeKind::UNSIGNED_16);
+        ret = AstType::Primitive(TypeKind::UNSIGNED_16); break;
     case Type::TYPE_UNSIGNED_32:
-        return AstType::Primitive(TypeKind::UNSIGNED_32);
+        ret = AstType::Primitive(TypeKind::UNSIGNED_32); break;
     case Type::TYPE_UNSIGNED_64:
-        return AstType::Primitive(TypeKind::UNSIGNED_64);
+        ret = AstType::Primitive(TypeKind::UNSIGNED_64); break;
     case Type::TYPE_SIGNED_8:
-        return AstType::Primitive(TypeKind::SIGNED_8);
+        ret = AstType::Primitive(TypeKind::SIGNED_8); break; 
     case Type::TYPE_SIGNED_16:
-        return AstType::Primitive(TypeKind::SIGNED_16);
+        ret = AstType::Primitive(TypeKind::SIGNED_16); break; 
     case Type::TYPE_SIGNED_32:
-        return AstType::Primitive(TypeKind::SIGNED_32);
+        ret = AstType::Primitive(TypeKind::SIGNED_32); break;
     case Type::TYPE_SIGNED_64:
-        return AstType::Primitive(TypeKind::SIGNED_64);
+        ret = AstType::Primitive(TypeKind::SIGNED_64); break;
     case Type::TYPE_BOOLEAN:
-        return AstType::Primitive(TypeKind::BOOLEAN);
+        ret = AstType::Primitive(TypeKind::BOOLEAN); break;
     case Type::TYPE_STRING:
-        return AstType::Primitive(TypeKind::STRING);
+        ret = AstType::Primitive(TypeKind::STRING); break;
     case Type::IDENTIFIER:
-        return AstType::Struct(typing.value);
+        ret = AstType::Struct(typing.value); break;
+    case Type::TYPE_PTR: {
+        ret = parsePointer(typing);
+        break;
+    }
+        
     default:
             throw std::runtime_error("Unknown type");
     }
+    if (!ret.isPointer())
+        consume(typing.type);
+    return ret;
 }
 
 int Parser::parseNumber() // thanks gpt
@@ -117,7 +147,7 @@ bool Parser::parseBoolean()
     return ret;
 }
 
-std::unique_ptr<Node> Parser::parseCall()
+std::unique_ptr<CallNode> Parser::parseCall()
 {
     std::string_view name = currentToken.value;
     consume(Type::IDENTIFIER);
@@ -134,7 +164,34 @@ std::unique_ptr<Node> Parser::parseCall()
     return std::make_unique<CallNode>(CallNode(name, std::move(parameters)));
 }
 
-std::unique_ptr<VariableNode> Parser::parseVariableDeclaration(bool zeropage)
+std::unique_ptr<MemberReferenceNode> Parser::parseMemberReference()
+{
+    // base identifier
+    std::string_view baseName = currentToken.value;
+    consume(Type::IDENTIFIER);
+
+    // first ".member" is required
+    consume(Type::PERIOD);
+    if (currentToken.type != Type::IDENTIFIER)
+        throw std::runtime_error("Invalid member reference: expected identifier after '.'");
+
+    std::string_view memberName = currentToken.value;
+    consume(Type::IDENTIFIER);
+
+    auto root = std::make_unique<MemberReferenceNode>(
+        std::make_unique<ReferenceNode>(baseName),
+        memberName
+    );
+
+    // chain: a.b.c.d ... (not supported with current AST)
+    if (currentToken.type == Type::PERIOD) { // thanks gpt
+        throw std::runtime_error("Invalid member reference: chained member access is not supported");
+    }
+
+    return root;
+}
+
+std::unique_ptr<VariableNode> Parser::parseVariableDeclaration(bool constant, bool zeropage)
 {
     consume(Type::VARIABLE);
     std::string_view name = currentToken.value;
@@ -142,13 +199,8 @@ std::unique_ptr<VariableNode> Parser::parseVariableDeclaration(bool zeropage)
     consume(Type::IDENTIFIER);
     consume(Type::COLON);
     auto type = parseType(currentToken);
-    if (type == TypeKind::UNKNOWN)
-        throw std::runtime_error("Unknown type");
-    else if (type == TypeKind::STRUCTURE)
-        strutype = currentToken.value;
-    consume(currentToken.type);
     consume(Type::ASSIGN);
-    return std::make_unique<VariableNode>(VariableNode(name, type, parseExpression(), zeropage, strutype));
+    return std::make_unique<VariableNode>(VariableNode(name, type, parseExpression(), constant, zeropage, strutype));
 }
 
 std::unique_ptr<Node> Parser::parseStatement()
@@ -158,7 +210,16 @@ std::unique_ptr<Node> Parser::parseStatement()
     case Type::ZEROPAGE:
     {
         consume(Type::ZEROPAGE);
-
+        bool constant = currentToken.type == Type::CONSTANT;
+        if (constant)
+            consume(currentToken.type);
+        auto vardeclelcdxa = parseVariableDeclaration(constant, true);
+        consume(Type::SEMICOLON);
+        return std::move(vardeclelcdxa);
+    }
+    case Type::CONSTANT:
+    {
+        consume(Type::CONSTANT);
         auto vardeclelcdxa = parseVariableDeclaration(true);
         consume(Type::SEMICOLON);
         return std::move(vardeclelcdxa);
@@ -210,15 +271,20 @@ std::unique_ptr<FunctionNode> Parser::parseFunction(bool interrupt)
         consume(Type::COLON);
         
         auto type = parseType(currentToken);
-        consume(currentToken.type);
         if (currentToken.type == Type::COMMA) consume(Type::COMMA);
         parameters.emplace(std::make_pair(param, type));
     }
     consume(Type::CLOSE_PAREN);
 
-    auto block = parseBlock();
-
+    if (currentToken.type != Type::SEMICOLON) {
+        auto block = parseBlock();
+        
     return std::make_unique<FunctionNode>(FunctionNode(name, std::move(parameters), std::move(block), interrupt));
+    }
+    else {
+        return std::make_unique<FunctionNode>(FunctionNode(name, std::move(parameters), std::vector<std::unique_ptr<Node>>(), interrupt));
+    }
+
 }
 
 std::unique_ptr<StructureNode> Parser::parseStructure()
@@ -239,7 +305,6 @@ std::unique_ptr<StructureNode> Parser::parseStructure()
         consume(Type::COLON);
         
         auto type = parseType(currentToken);
-        consume(currentToken.type);
         if (currentToken.type == Type::COMMA) consume(Type::COMMA);
         parameters.emplace(std::make_pair(param, type));
     }
@@ -247,6 +312,27 @@ std::unique_ptr<StructureNode> Parser::parseStructure()
 
 
     return std::make_unique<StructureNode>(StructureNode(name, std::move(parameters)));
+}
+std::unique_ptr<StructureInitNode> Parser::parseStructureInit()
+{
+    consume(Type::OPEN_BRACE);
+
+    std::map<std::string_view, std::unique_ptr<Node>> parameters;
+
+    while (currentToken.type != Type::CLOSE_BRACE)
+    {
+        const auto param = currentToken.value;
+        consume(Type::IDENTIFIER);
+        consume(Type::COLON);
+        
+        auto expr = parseExpression();
+        if (currentToken.type == Type::COMMA) consume(Type::COMMA);
+        parameters.emplace(std::make_pair(param, std::move(expr)));
+    }
+    consume(Type::CLOSE_BRACE);
+
+
+    return std::make_unique<StructureInitNode>(StructureInitNode(std::move(parameters)));
 }
 
 ProgramNode *Parser::parseProgram()
@@ -259,6 +345,9 @@ ProgramNode *Parser::parseProgram()
         {
         case Type::INCLUDE:
             root->statements.push_back(parseInclude());
+            break;
+        case Type::DEFINE:
+            root->statements.push_back(parseDefine());
             break;
         case Type::FUNCTION:
             root->statements.push_back(parseFunction());
@@ -301,6 +390,13 @@ std::unique_ptr<IncludeNode> Parser::parseInclude()
 {
     consume(Type::INCLUDE);
     return std::make_unique<IncludeNode>(IncludeNode(parseString()));
+}
+std::unique_ptr<DefineNode> Parser::parseDefine()
+{
+    consume(Type::DEFINE);
+    auto name = currentToken.value;
+    consume(Type::IDENTIFIER);
+    return std::make_unique<DefineNode>(DefineNode(name, parseExpression()));
 }
 
 std::unique_ptr<Node> Parser::parseExpression()
@@ -374,12 +470,12 @@ std::unique_ptr<Node> Parser::parseMultiplicative()
 
 std::unique_ptr<Node> Parser::parseUnary()
 {
-    if (currentToken.type == Type::EXCLAIM || currentToken.type == Type::MINUS)
+    if (currentToken.type == Type::EXCLAIM || currentToken.type == Type::MINUS || currentToken.type == Type::AT || currentToken.type == Type::HASH)
     {
         Token op = currentToken;
         consume(op.type);
         auto operand = parseUnary();
-        const auto operate = (op.type == Type::EXCLAIM) ? UnaryOperator::NOT : UnaryOperator::NEGATE;
+        const auto operate = tokenToUnary(op);
         return std::make_unique<UnaryNode>(UnaryNode(operate, std::move(operand)));
     }
     return parsePrimary();
@@ -402,11 +498,23 @@ std::unique_ptr<Node> Parser::parsePrimary()
     {
         return std::make_unique<BoolNode>(BoolNode(parseBoolean()));
     }
+    case Type::OPEN_PAREN:
+    {
+        std::unique_ptr<Node> expression = parseExpression();
+        consume(Type::CLOSE_PAREN);
+        return expression;
+    }
+    case Type::OPEN_BRACE: {
+        if (peek().type == Type::IDENTIFIER && peek(2).type == Type::COLON)
+            return parseStructureInit();
+    }
     case Type::IDENTIFIER:
     {
         if (peek().type == Type::OPEN_PAREN)
         {
             return parseCall();
+        } else if (peek().type == Type::PERIOD) {
+            return parseMemberReference();
         }
         else
         {
@@ -417,7 +525,7 @@ std::unique_ptr<Node> Parser::parsePrimary()
         }
     }
     default:
-        throw std::runtime_error("Unknown expression");
+        throw std::runtime_error("Unknown expression at " + std::to_string(position) + " " + currentToken.to_string());
     }
 }
 

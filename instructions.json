@@ -1,0 +1,1538 @@
+[
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "Immediate",
+    "Form": "ADC #Oper",
+    "Opcode": 69,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "Zero Page",
+    "Form": "ADC Zpg",
+    "Opcode": 65,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "Zero Page,X",
+    "Form": "ADC Zpg,X",
+    "Opcode": 75,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "Absolute",
+    "Form": "ADC Abs",
+    "Opcode": "6D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "Absolute,X",
+    "Form": "ADC Abs,X",
+    "Opcode": "7D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "Absolute,Y",
+    "Form": "ADC Abs,Y",
+    "Opcode": 79,
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "ADC (Zpg,X)",
+    "Opcode": 61,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "ADC (Zpg),Y",
+    "Opcode": 71,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "ADC",
+    "Addressing mode": "(Zero Page)",
+    "Form": "ADC (Zpg)",
+    "Opcode": 72,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "Immediate",
+    "Form": "AND #Oper",
+    "Opcode": 29,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "Zero Page",
+    "Form": "AND Zpg",
+    "Opcode": 25,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "Zero Page,X",
+    "Form": "AND Zpg,X",
+    "Opcode": 35,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "Absolute",
+    "Form": "AND Abs",
+    "Opcode": "2D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "Absolute,X",
+    "Form": "AND Abs,X",
+    "Opcode": "3D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "Absolute,Y",
+    "Form": "AND Abs,Y",
+    "Opcode": 39,
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "AND (Zpg,X)",
+    "Opcode": 21,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "AND (Zpg),Y",
+    "Opcode": 31,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "AND",
+    "Addressing mode": "(Zero Page)",
+    "Form": "AND (Zpg)",
+    "Opcode": 32,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "ASL",
+    "Addressing mode": "Accumulator",
+    "Form": "ASL A",
+    "Opcode": "0A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "ASL",
+    "Addressing mode": "Zero Page",
+    "Form": "ASL Zpg",
+    "Opcode": 6,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "ASL",
+    "Addressing mode": "Zero Page,X",
+    "Form": "ASL Zpg,X",
+    "Opcode": 16,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ASL",
+    "Addressing mode": "Absolute",
+    "Form": "ASL Abs",
+    "Opcode": "0E",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ASL",
+    "Addressing mode": "Absolute,X",
+    "Form": "ASL Abs,X",
+    "Opcode": "1E",
+    "Size": 3,
+    "Timing": 7
+  },
+  {
+    "Mnemonic": "BBR0",
+    "Addressing mode": "Relative",
+    "Form": "BBR0 Oper",
+    "Opcode": "0F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBR1",
+    "Addressing mode": "Relative",
+    "Form": "BBR1 Oper",
+    "Opcode": "1F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBR2",
+    "Addressing mode": "Relative",
+    "Form": "BBR2 Oper",
+    "Opcode": "2F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBR3",
+    "Addressing mode": "Relative",
+    "Form": "BBR3 Oper",
+    "Opcode": "3F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBR4",
+    "Addressing mode": "Relative",
+    "Form": "BBR4 Oper",
+    "Opcode": "4F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBR5",
+    "Addressing mode": "Relative",
+    "Form": "BBR5 Oper",
+    "Opcode": "5F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBR6",
+    "Addressing mode": "Relative",
+    "Form": "BBR6 Oper",
+    "Opcode": "6F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBR7",
+    "Addressing mode": "Relative",
+    "Form": "BBR7 Oper",
+    "Opcode": "7F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS0",
+    "Addressing mode": "Relative",
+    "Form": "BBS0 Oper",
+    "Opcode": "8F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS1",
+    "Addressing mode": "Relative",
+    "Form": "BBS1 Oper",
+    "Opcode": "9F",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS2",
+    "Addressing mode": "Relative",
+    "Form": "BBS2 Oper",
+    "Opcode": "AF",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS3",
+    "Addressing mode": "Relative",
+    "Form": "BBS3 Oper",
+    "Opcode": "BF",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS4",
+    "Addressing mode": "Relative",
+    "Form": "BBS4 Oper",
+    "Opcode": "CF",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS5",
+    "Addressing mode": "Relative",
+    "Form": "BBS5 Oper",
+    "Opcode": "DF",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS6",
+    "Addressing mode": "Relative",
+    "Form": "BBS6 Oper",
+    "Opcode": "EF",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BBS7",
+    "Addressing mode": "Relative",
+    "Form": "BBS7 Oper",
+    "Opcode": "FF",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BCC",
+    "Addressing mode": "Relative",
+    "Form": "BCC Oper",
+    "Opcode": 90,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BCS",
+    "Addressing mode": "Relative",
+    "Form": "BCS Oper",
+    "Opcode": "B0",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BEQ",
+    "Addressing mode": "Relative",
+    "Form": "BEQ Oper",
+    "Opcode": "F0",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BIT",
+    "Addressing mode": "Immediate",
+    "Form": "BIT #Oper",
+    "Opcode": 89,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BIT",
+    "Addressing mode": "Zero Page",
+    "Form": "BIT Zpg",
+    "Opcode": 24,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "BIT",
+    "Addressing mode": "Zero Page,X",
+    "Form": "BIT Zpg,X",
+    "Opcode": 34,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "BIT",
+    "Addressing mode": "Absolute",
+    "Form": "BIT Abs",
+    "Opcode": "2C",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "BIT",
+    "Addressing mode": "Absolute,X",
+    "Form": "BIT Abs,X",
+    "Opcode": "3C",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "BMI",
+    "Addressing mode": "Relative",
+    "Form": "BMI Oper",
+    "Opcode": 30,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BNE",
+    "Addressing mode": "Relative",
+    "Form": "BNE Oper",
+    "Opcode": "D0",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BPL",
+    "Addressing mode": "Relative",
+    "Form": "BPL Oper",
+    "Opcode": 10,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BRA",
+    "Addressing mode": "Relative",
+    "Form": "BRA Oper",
+    "Opcode": 80,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "BRK",
+    "Addressing mode": "Implied",
+    "Form": "BRK",
+    "Opcode": 0,
+    "Size": 1,
+    "Timing": 7
+  },
+  {
+    "Mnemonic": "BVC",
+    "Addressing mode": "Relative",
+    "Form": "BVC Oper",
+    "Opcode": 50,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "BVS",
+    "Addressing mode": "Relative",
+    "Form": "BVS Oper",
+    "Opcode": 70,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CLC",
+    "Addressing mode": "Implied",
+    "Form": "CLC",
+    "Opcode": 18,
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CLD",
+    "Addressing mode": "Implied",
+    "Form": "CLD",
+    "Opcode": "D8",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CLI",
+    "Addressing mode": "Implied",
+    "Form": "CLI",
+    "Opcode": 58,
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CLV",
+    "Addressing mode": "Implied",
+    "Form": "CLV",
+    "Opcode": "B8",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "Immediate",
+    "Form": "CMP #Oper",
+    "Opcode": "C9",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "Zero Page",
+    "Form": "CMP Zpg",
+    "Opcode": "C5",
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "Zero Page,X",
+    "Form": "CMP Zpg",
+    "Opcode": "D5",
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "Absolute",
+    "Form": "CMP Abs",
+    "Opcode": "CD",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "Absolute,X",
+    "Form": "CMP Abs,X",
+    "Opcode": "DD",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "Absolute,Y",
+    "Form": "CMP Abs,Y",
+    "Opcode": "D9",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "CMP (Zpg,X)",
+    "Opcode": "C1",
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "CMP (Zpg),Y",
+    "Opcode": "D1",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "CMP",
+    "Addressing mode": "(Zero Page)",
+    "Form": "CMP (Zpg)",
+    "Opcode": "D2",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "CPX",
+    "Addressing mode": "Immediate",
+    "Form": "CPX #Oper",
+    "Opcode": "E0",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CPX",
+    "Addressing mode": "Zero Page",
+    "Form": "CPX Zpg",
+    "Opcode": "E4",
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "CPX",
+    "Addressing mode": "Absolute",
+    "Form": "CPX Abs",
+    "Opcode": "EC",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "CPY",
+    "Addressing mode": "Immediate",
+    "Form": "CPY #Oper",
+    "Opcode": "C0",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "CPY",
+    "Addressing mode": "Zero Page",
+    "Form": "CPY Zpg",
+    "Opcode": "C4",
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "CPY",
+    "Addressing mode": "Absolute",
+    "Form": "CPY Abs",
+    "Opcode": "CC",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "DEA",
+    "Addressing mode": "Accumulator",
+    "Form": "DEA",
+    "Opcode": "3A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "DEC",
+    "Addressing mode": "Zero Page",
+    "Form": "DEC Zpg",
+    "Opcode": "C6",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "DEC",
+    "Addressing mode": "Zero Page,X",
+    "Form": "DEC Zpg,X",
+    "Opcode": "D6",
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "DEC",
+    "Addressing mode": "Absolute",
+    "Form": "DEC Abs",
+    "Opcode": "CE",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "DEC",
+    "Addressing mode": "Absolute,X",
+    "Form": "DEC Abs,X",
+    "Opcode": "DE",
+    "Size": 3,
+    "Timing": 7
+  },
+  {
+    "Mnemonic": "DEX",
+    "Addressing mode": "Implied",
+    "Form": "DEX",
+    "Opcode": "CA",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "DEY",
+    "Addressing mode": "Implied",
+    "Form": "DEY",
+    "Opcode": 88,
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "Immediate",
+    "Form": "EOR #Oper",
+    "Opcode": 49,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "Zero Page",
+    "Form": "EOR Zpg",
+    "Opcode": 45,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "Zero Page,X",
+    "Form": "EOR Zpg,X",
+    "Opcode": 55,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "Absolute",
+    "Form": "EOR Abs",
+    "Opcode": "4D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "Absolute,X",
+    "Form": "EOR Abs,X",
+    "Opcode": "5D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "Absolute,Y",
+    "Form": "EOR Abs,Y",
+    "Opcode": 59,
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "EOR (Zpg,X)",
+    "Opcode": 41,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "EOR (Zpg),Y",
+    "Opcode": 51,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "EOR",
+    "Addressing mode": "(Zero Page)",
+    "Form": "EOR (Zpg)",
+    "Opcode": 52,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "INA",
+    "Addressing mode": "Accumulator",
+    "Form": "INA",
+    "Opcode": "1A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "INC",
+    "Addressing mode": "Zero Page",
+    "Form": "INC Zpg",
+    "Opcode": "E6",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "INC",
+    "Addressing mode": "Zero Page,X",
+    "Form": "INC Zpg,X",
+    "Opcode": "F6",
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "INC",
+    "Addressing mode": "Absolute",
+    "Form": "INC Abs",
+    "Opcode": "EE",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "INC",
+    "Addressing mode": "Absolute,X",
+    "Form": "INC Abs,X",
+    "Opcode": "FE",
+    "Size": 3,
+    "Timing": 7
+  },
+  {
+    "Mnemonic": "INX",
+    "Addressing mode": "Implied",
+    "Form": "INX",
+    "Opcode": "E8",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "INY",
+    "Addressing mode": "Implied",
+    "Form": "INY",
+    "Opcode": "C8",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "JMP",
+    "Addressing mode": "Absolute",
+    "Form": "JMP Abs",
+    "Opcode": "4C",
+    "Size": 3,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "JMP",
+    "Addressing mode": "(Absolute)",
+    "Form": "JMP (Abs)",
+    "Opcode": "6C",
+    "Size": 3,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "JMP",
+    "Addressing mode": "(Absolute,X)",
+    "Form": "JMP (Abs,X)",
+    "Opcode": "7C",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "JSR",
+    "Addressing mode": "Absolute",
+    "Form": "JSR Abs",
+    "Opcode": 20,
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "Immediate",
+    "Form": "LDA #Oper",
+    "Opcode": "A9",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "Zero Page",
+    "Form": "LDA Zpg",
+    "Opcode": "A5",
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "Zero Page,X",
+    "Form": "LDA Zpg,X",
+    "Opcode": "B5",
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "Absolute",
+    "Form": "LDA Abs",
+    "Opcode": "AD",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "Absolute,X",
+    "Form": "LDA Abs,X",
+    "Opcode": "BD",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "Absolute,Y",
+    "Form": "LDA Abs,Y",
+    "Opcode": "B9",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "LDA (Zpg,X)",
+    "Opcode": "A1",
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "LDA (Zpg),Y",
+    "Opcode": "B1",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "LDA",
+    "Addressing mode": "(Zero Page)",
+    "Form": "LDA (Zpg)",
+    "Opcode": "B2",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "LDX",
+    "Addressing mode": "Immediate",
+    "Form": "LDX #Oper",
+    "Opcode": "A2",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "LDX",
+    "Addressing mode": "Zero Page",
+    "Form": "LDX Zpg",
+    "Opcode": "A6",
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "LDX",
+    "Addressing mode": "Zero Page,Y",
+    "Form": "LDX Zpg,Y",
+    "Opcode": "B6",
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDX",
+    "Addressing mode": "Absolute",
+    "Form": "LDX Abs",
+    "Opcode": "AE",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDX",
+    "Addressing mode": "Absolute,Y",
+    "Form": "LDX Abs,Y",
+    "Opcode": "BE",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDY",
+    "Addressing mode": "Immediate",
+    "Form": "LDY #Oper",
+    "Opcode": "A0",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "LDY",
+    "Addressing mode": "Zero Page",
+    "Form": "LDY Zpg",
+    "Opcode": "A4",
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "LDY",
+    "Addressing mode": "Zero Page,Y",
+    "Form": "LDY Zpg,X",
+    "Opcode": "B4",
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDY",
+    "Addressing mode": "Absolute",
+    "Form": "LDY Abs",
+    "Opcode": "AC",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LDY",
+    "Addressing mode": "Absolute,Y",
+    "Form": "LDY Abs,X",
+    "Opcode": "BC",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "LSR",
+    "Addressing mode": "Accumulator",
+    "Form": "LSR A",
+    "Opcode": "4A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "LSR",
+    "Addressing mode": "Zero Page",
+    "Form": "LSR Zpg",
+    "Opcode": 46,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "LSR",
+    "Addressing mode": "Zero Page,X",
+    "Form": "LSR Zpg,X",
+    "Opcode": 56,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "LSR",
+    "Addressing mode": "Absolute",
+    "Form": "LSR Abs",
+    "Opcode": "4E",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "LSR",
+    "Addressing mode": "Absolute,X",
+    "Form": "LSR Abs,X",
+    "Opcode": "5E",
+    "Size": 3,
+    "Timing": 7
+  },
+  {
+    "Mnemonic": "NOP",
+    "Addressing mode": "Implied",
+    "Form": "NOP",
+    "Opcode": "EA",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "Immediate",
+    "Form": "ORA #Oper",
+    "Opcode": 9,
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "Zero Page",
+    "Form": "ORA Zpg",
+    "Opcode": 5,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "Zero Page,X",
+    "Form": "ORA Zpg,X",
+    "Opcode": 15,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "Absolute",
+    "Form": "ORA Abs",
+    "Opcode": "0D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "Absolute,X",
+    "Form": "ORA Abs,X",
+    "Opcode": "1D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "Absolute,Y",
+    "Form": "ORA Abs,Y",
+    "Opcode": 19,
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "ORA (Zpg,X)",
+    "Opcode": 1,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "ORA (Zpg),Y",
+    "Opcode": 11,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "ORA",
+    "Addressing mode": "(Zero Page)",
+    "Form": "ORA (Zpg)",
+    "Opcode": 12,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "PHA",
+    "Addressing mode": "Implied",
+    "Form": "PHA",
+    "Opcode": 48,
+    "Size": 1,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "PHX",
+    "Addressing mode": "Implied",
+    "Form": "PHX",
+    "Opcode": "DA",
+    "Size": 1,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "PHY",
+    "Addressing mode": "Implied",
+    "Form": "PHY",
+    "Opcode": "5A",
+    "Size": 1,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "PLA",
+    "Addressing mode": "Implied",
+    "Form": "PLA",
+    "Opcode": 68,
+    "Size": 1,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "PLX",
+    "Addressing mode": "Implied",
+    "Form": "PLX",
+    "Opcode": "FA",
+    "Size": 1,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "PLY",
+    "Addressing mode": "Implied",
+    "Form": "PLY",
+    "Opcode": "7A",
+    "Size": 1,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "ROL",
+    "Addressing mode": "Accumulator",
+    "Form": "ROL A",
+    "Opcode": "2A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "ROL",
+    "Addressing mode": "Zero Page",
+    "Form": "ROL Zpg",
+    "Opcode": 26,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "ROL",
+    "Addressing mode": "Zero Page,X",
+    "Form": "ROL Zpg,X",
+    "Opcode": 36,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ROL",
+    "Addressing mode": "Absolute",
+    "Form": "ROL Abs",
+    "Opcode": "2E",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ROL",
+    "Addressing mode": "Absolute,X",
+    "Form": "ROL Abs,X",
+    "Opcode": "3E",
+    "Size": 3,
+    "Timing": 7
+  },
+  {
+    "Mnemonic": "ROR",
+    "Addressing mode": "Accumulator",
+    "Form": "ROR A",
+    "Opcode": "6A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "ROR",
+    "Addressing mode": "Zero Page",
+    "Form": "ROR Zpg",
+    "Opcode": 66,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "ROR",
+    "Addressing mode": "Zero Page,X",
+    "Form": "ROR Zpg,X",
+    "Opcode": 76,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ROR",
+    "Addressing mode": "Absolute",
+    "Form": "ROR Abs",
+    "Opcode": "6E",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "ROR",
+    "Addressing mode": "Absolute,X",
+    "Form": "ROR Abs,X",
+    "Opcode": "7E",
+    "Size": 3,
+    "Timing": 7
+  },
+  {
+    "Mnemonic": "RTI",
+    "Addressing mode": "Implied",
+    "Form": "RTI",
+    "Opcode": 40,
+    "Size": 1,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "RTS",
+    "Addressing mode": "Implied",
+    "Form": "RTS",
+    "Opcode": 60,
+    "Size": 1,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "Immediate",
+    "Form": "SBC #Oper",
+    "Opcode": "E9",
+    "Size": 2,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "Zero Page",
+    "Form": "SBC Zpg",
+    "Opcode": "E5",
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "Zero Page,X",
+    "Form": "SBC Zpg,X",
+    "Opcode": "F5",
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "Absolute",
+    "Form": "SBC Abs",
+    "Opcode": "ED",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "Absolute,X",
+    "Form": "SBC Abs,X",
+    "Opcode": "FD",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "Absolute,Y",
+    "Form": "SBC Abs,Y",
+    "Opcode": "F9",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "SBC (Zpg,X)",
+    "Opcode": "E1",
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "SBC (Zpg),Y",
+    "Opcode": "F1",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "SBC",
+    "Addressing mode": "(Zero Page)",
+    "Form": "SBC (Zpg)",
+    "Opcode": "F2",
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "SEC",
+    "Addressing mode": "Implied",
+    "Form": "SEC",
+    "Opcode": 38,
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "SED",
+    "Addressing mode": "Implied",
+    "Form": "SED",
+    "Opcode": "F8",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "SEI",
+    "Addressing mode": "Implied",
+    "Form": "SEI",
+    "Opcode": 78,
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "Zero Page",
+    "Form": "STA Zpg",
+    "Opcode": 85,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "Zero Page,X",
+    "Form": "STA Zpg,X",
+    "Opcode": 95,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "Absolute",
+    "Form": "STA Abs",
+    "Opcode": "8D",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "Absolute,X",
+    "Form": "STA Abs,X",
+    "Opcode": "9D",
+    "Size": 3,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "Absolute,Y",
+    "Form": "STA Abs,Y",
+    "Opcode": 99,
+    "Size": 3,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "(Zero Page,X)",
+    "Form": "STA (Zpg,X)",
+    "Opcode": 81,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "(Zero Page),Y",
+    "Form": "STA (Zpg),Y",
+    "Opcode": 91,
+    "Size": 2,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "STA",
+    "Addressing mode": "(Zero Page)",
+    "Form": "STA (Zpg)",
+    "Opcode": 92,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "STX",
+    "Addressing mode": "Zero Page",
+    "Form": "STX Zpg",
+    "Opcode": 86,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "STX",
+    "Addressing mode": "Zero Page,Y",
+    "Form": "STX Zpg,Y",
+    "Opcode": 96,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STX",
+    "Addressing mode": "Absolute",
+    "Form": "STX Abs",
+    "Opcode": "8E",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STY",
+    "Addressing mode": "Zero Page",
+    "Form": "STY Zpg",
+    "Opcode": 84,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "STY",
+    "Addressing mode": "Zero Page,X",
+    "Form": "STY Zpg,X",
+    "Opcode": 94,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STY",
+    "Addressing mode": "Absolute",
+    "Form": "STY Abs",
+    "Opcode": "8C",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STZ",
+    "Addressing mode": "Zero Page",
+    "Form": "STZ Zpg",
+    "Opcode": 64,
+    "Size": 2,
+    "Timing": 3
+  },
+  {
+    "Mnemonic": "STZ",
+    "Addressing mode": "Zero Page,X",
+    "Form": "STZ Zpg,X",
+    "Opcode": 74,
+    "Size": 2,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STZ",
+    "Addressing mode": "Absolute",
+    "Form": "STZ Abs",
+    "Opcode": "9C",
+    "Size": 3,
+    "Timing": 4
+  },
+  {
+    "Mnemonic": "STZ",
+    "Addressing mode": "Absolute,X",
+    "Form": "STZ Abs,X",
+    "Opcode": "9E",
+    "Size": 3,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "TAX",
+    "Addressing mode": "Implied",
+    "Form": "TAX",
+    "Opcode": "AA",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "TAY",
+    "Addressing mode": "Implied",
+    "Form": "TAY",
+    "Opcode": "A8",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "TRB",
+    "Addressing mode": "Zero Page",
+    "Form": "TRB Zpg",
+    "Opcode": 14,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "TRB",
+    "Addressing mode": "Absolute",
+    "Form": "TRB Abs",
+    "Opcode": "1C",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "TSB",
+    "Addressing mode": "Zero Page",
+    "Form": "TSB Zpg",
+    "Opcode": 4,
+    "Size": 2,
+    "Timing": 5
+  },
+  {
+    "Mnemonic": "TSB",
+    "Addressing mode": "Absolute",
+    "Form": "TSB Abs",
+    "Opcode": "0C",
+    "Size": 3,
+    "Timing": 6
+  },
+  {
+    "Mnemonic": "TSX",
+    "Addressing mode": "Implied",
+    "Form": "TSX",
+    "Opcode": "BA",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "TXA",
+    "Addressing mode": "Implied",
+    "Form": "TXA",
+    "Opcode": "8A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "TXS",
+    "Addressing mode": "Implied",
+    "Form": "TXS",
+    "Opcode": "9A",
+    "Size": 1,
+    "Timing": 2
+  },
+  {
+    "Mnemonic": "TYA",
+    "Addressing mode": "Implied",
+    "Form": "TYA",
+    "Opcode": 98,
+    "Size": 1,
+    "Timing": 2
+  }
+]

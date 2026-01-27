@@ -1,5 +1,6 @@
 #include <string>
 #include "lexer.hpp"
+#include "parser.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -31,10 +32,12 @@ int main(int argc, char* argv[]) {
         Lexer lexer(source_code);
         auto tokens = lexer.tokenize();
         // 3. Print tokens
-        for (const auto& token : tokens) {
-            std::cout << "Token(Type: " << static_cast<int>(token.type)
-                      << ", Value: \"" << token.value << "\")\n";
-        }
+        // for (const auto& token : tokens) {
+        //     std::cout << "Token(Type: " << static_cast<int>(token.type)
+        //               << ", Value: \"" << token.value << "\")\n";
+        // }
+        Parser parser(tokens);
+        auto parsed = parser.parse();
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

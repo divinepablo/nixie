@@ -161,3 +161,67 @@ TEST(ParserTests, WhileLoop) {
     });
 }
 
+TEST(ParserTests, UnaryExpressions) {
+    // Negation
+    expect_program("var x: i8 = -5;", {
+        [](const Node* n) {
+            const auto* var = dynamic_cast<const VariableNode*>(n);
+            ASSERT_NE(var, nullptr);
+            
+            const auto* unary = dynamic_cast<const UnaryNode*>(var->value.get());
+            ASSERT_NE(unary, nullptr) << "Expected UnaryNode for negation";
+            EXPECT_EQ(unary->operation, UnaryOperator::NEGATE);
+            
+            const auto* num = dynamic_cast<const NumberNode*>(unary->expression.get());
+            ASSERT_NE(num, nullptr) << "Expected NumberNode inside negation";
+            EXPECT_EQ(num->value, 5);
+        }
+    });
+
+    // Logical NOT
+    expect_program("var b: bool = !true;", {
+        [](const Node* n) {
+            const auto* var = dynamic_cast<const VariableNode*>(n);
+            ASSERT_NE(var, nullptr);
+            
+            const auto* unary = dynamic_cast<const UnaryNode*>(var->value.get());
+            ASSERT_NE(unary, nullptr) << "Expected UnaryNode for logical NOT";
+            EXPECT_EQ(unary->operation, UnaryOperator::NOT);
+            
+            const auto* boolean = dynamic_cast<const BoolNode*>(unary->expression.get());
+            ASSERT_NE(boolean, nullptr) << "Expected BoolNode inside NOT";
+            EXPECT_EQ(boolean->value, true);
+        }
+    });
+    // Logical NOT
+    expect_program("var b: ptr[u8] = #a;", {
+        [](const Node* n) {
+            const auto* var = dynamic_cast<const VariableNode*>(n);
+            ASSERT_NE(var, nullptr);
+            
+            const auto* unary = dynamic_cast<const UnaryNode*>(var->value.get());
+            ASSERT_NE(unary, nullptr) << "Expected UnaryNode for reference";
+            EXPECT_EQ(unary->operation, UnaryOperator::REFERENCE);
+            
+            const auto* id = dynamic_cast<const ReferenceNode*>(unary->expression.get());
+            ASSERT_NE(id, nullptr) << "Expected ReferenceNode inside reference";
+            EXPECT_EQ(id->name, "a");
+        }
+    });
+    // Logical NOT
+    expect_program("var a: u8 = @b;", {
+        [](const Node* n) {
+            const auto* var = dynamic_cast<const VariableNode*>(n);
+            ASSERT_NE(var, nullptr);
+            
+            const auto* unary = dynamic_cast<const UnaryNode*>(var->value.get());
+            ASSERT_NE(unary, nullptr) << "Expected UnaryNode for deference";
+            EXPECT_EQ(unary->operation, UnaryOperator::DEREFERENCE);
+            
+            const auto* id = dynamic_cast<const ReferenceNode*>(unary->expression.get());
+            ASSERT_NE(id, nullptr) << "Expected ReferenceNode inside dereference";
+            EXPECT_EQ(id->name, "b");
+        }
+    });
+}
+

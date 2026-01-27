@@ -1,3 +1,4 @@
+#pragma once
 #include "lexer.hpp"
 #include <stdexcept>
 #include "ast.hpp"
@@ -44,15 +45,18 @@ public:
     }
 
     ProgramNode* parseProgram();
+    ProgramNode* parse() {return parseProgram();};
+    const AstType parsePointer(Token typing);
     constexpr AstType parseType(Token typing);
     std::unique_ptr<Node> parseExpression();
 
     int parseNumber();
     std::unique_ptr<StringNode> parseString();
     bool parseBoolean();
-    std::unique_ptr<Node> parseCall();
+    std::unique_ptr<CallNode> parseCall();
+    std::unique_ptr<MemberReferenceNode> parseMemberReference();
 
-    std::unique_ptr<VariableNode> parseVariableDeclaration(bool zeropage=false);
+    std::unique_ptr<VariableNode> parseVariableDeclaration(bool constant=false, bool zeropage=false);
 
     std::unique_ptr<Node> parseStatement();
     
@@ -60,10 +64,12 @@ public:
 
     std::unique_ptr<FunctionNode> parseFunction(bool interrupt = false);
     std::unique_ptr<StructureNode> parseStructure();
+    std::unique_ptr<StructureInitNode> parseStructureInit();
     std::unique_ptr<IfNode> parseIf();
     std::unique_ptr<WhileNode> parseWhile();
     
     std::unique_ptr<IncludeNode> parseInclude();
+    std::unique_ptr<DefineNode> parseDefine();
     // std::unique_ptr<DefineNode> parseDefine();
 
     // --- Expression Parsing (Precedence Hierarchy) ---

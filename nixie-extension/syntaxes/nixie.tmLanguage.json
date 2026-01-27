@@ -30,6 +30,9 @@
 		},
 		{
 			"include": "#functions"
+		},
+		{
+			"include": "#symbols"
 		}
 	],
 	"repository": {
@@ -72,6 +75,37 @@
 				{
 					"name": "storage.type.$1.v",
 					"match": "(?<!\\.)\\b(bool|str)\\b"
+				},
+				{
+					"name": "storage.type.ptr.nixie",
+					"begin": "\\b(ptr)(\\[)",
+					"beginCaptures": {
+						"1": {
+							"name": "storage.type.nixie"
+						},
+						"2": {
+							"name": "punctuation.bracket.begin.nixie"
+						}
+					},
+					"end": "\\]",
+					"endCaptures": {
+						"0": {
+							"name": "punctuation.bracket.end.nixie"
+						}
+					},
+					"patterns": [
+						{
+							"include": "#types"
+						},
+						{
+							"match": "\\d+",
+							"name": "constant.numeric.nixie"
+						},
+						{
+							"match": ",",
+							"name": "punctuation.separator.nixie"
+						}
+					]
 				}
 			]
 		},
@@ -120,27 +154,77 @@
 			]
 		},
 		"functions": {
-            "begin": "\\b(fn)\\s+(\\w+)\\s*(\\()",
-            "beginCaptures": {
-                "1": { "name": "storage.type.function.nixie" },
-                "2": { "name": "entity.name.function.nixie" },
-                "3": { "name": "punctuation.definition.parameters.begin.nixie" }
-            },
-            "end": "(\\))",
-            "endCaptures": {
-                "1": { "name": "punctuation.definition.parameters.end.nixie" }
-            },
-            "patterns": [
-                {
-                    "match": "(\\w+)\\s*(:)",
-                    "captures": {
-                        "1": { "name": "variable.parameter.nixie" },
-                        "2": { "name": "punctuation.separator.key-value.nixie" }
-                    }
-                },
-                { "include": "#types" }
-            ]
-        }
+			"begin": "\\b(fn)\\s+(\\w+)\\s*(\\()",
+			"beginCaptures": {
+				"1": {
+					"name": "storage.type.function.nixie"
+				},
+				"2": {
+					"name": "entity.name.function.nixie"
+				},
+				"3": {
+					"name": "punctuation.definition.parameters.begin.nixie"
+				}
+			},
+			"end": "(\\))",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.definition.parameters.end.nixie"
+				}
+			},
+			"patterns": [
+				{
+					"match": "(\\w+)\\s*(:)",
+					"captures": {
+						"1": {
+							"name": "variable.parameter.nixie"
+						},
+						"2": {
+							"name": "punctuation.separator.key-value.nixie"
+						}
+					}
+				},
+				{
+					"include": "#types"
+				}
+			]
+		},
+		"symbols": {
+			"patterns": [
+				{
+					"name": "keyword.operator.arithmetic.nixie",
+					"match": "[+\\-*/%]"
+				},
+				{
+					"name": "keyword.operator.comparison.nixie",
+					"match": "(==|!=|<=|>=|<|>)"
+				},
+				{
+					"name": "keyword.operator.logical.nixie",
+					"match": "(&&|\\|\\||!)"
+				},
+				{
+					"name": "keyword.operator.bitwise.nixie",
+					"match": "(&|\\||\\^|~|<<|>>)"
+				},
+				{
+					"name": "keyword.operator.assignment.nixie",
+					"match": "(=)"
+				},
+				{
+					"name": "punctuation.separator.nixie",
+					"match": "[,;:]"
+				},
+				{
+					"name": "punctuation.bracket.nixie",
+					"match": "[()\\[\\]{}]"
+				},
+				{
+					"name": "keyword.operator.member.nixie",
+					"match": "\\.|@|#"
+				}
+			]
+		}
 	},
 	"scopeName": "source.nixie"
 }
