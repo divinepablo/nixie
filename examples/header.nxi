@@ -18,4 +18,4 @@ struct SpriteConfig {
 // These tell the compiler "this function exists elsewhere"
 fn init_system();
 fn clear_screen(color: u8);
-fn set_sprite_attr(s: *SpriteConfig);
+fn set_sprite_attr(s: ptr[SpriteConfig]);
