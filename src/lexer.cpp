@@ -111,6 +111,8 @@ std::vector<Token> Lexer::tokenize()
                 tokens.push_back({Type::VARIABLE, word});
             else if (word == "if")
                 tokens.push_back({Type::IF, word});
+            else if (word == "else")
+                tokens.push_back({Type::ELSE, word});
             else if (word == "while")
                 tokens.push_back({Type::WHILE, word});
             else if (word == "const")
@@ -145,6 +147,8 @@ std::vector<Token> Lexer::tokenize()
                 tokens.push_back({Type::TRUE, word});
             else if (word == "false")
                 tokens.push_back({Type::FALSE, word});
+            else if (word == "return")
+                tokens.push_back({Type::RETURN, word});
             else
                 tokens.push_back({Type::IDENTIFIER, word});
             continue;

@@ -179,9 +179,10 @@ struct ReferenceNode : Node
 };
 struct MemberReferenceNode : Node
 {
-    std::unique_ptr<Node> base;
+    // std::unique_ptr<Node> base;
+    std::string_view base;
     std::string_view memberName;
-    explicit MemberReferenceNode(std::unique_ptr<ReferenceNode> base, std::string_view val) : base(std::move(base)), memberName(val) {}
+    explicit MemberReferenceNode(std::string_view base, std::string_view val) : /*base(std::move(base)),*/ base(base), memberName(val) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
 struct CallNode : Node
@@ -261,8 +262,8 @@ struct FunctionNode : Node
     std::map<std::string_view, AstType> parameters;
     std::vector<std::unique_ptr<Node>> body;
     bool interrupt, defined;
-    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, std::vector<std::unique_ptr<Node>> nodes, bool interrupt = false) : name(id), parameters(std::move(parameters)), body(std::move(nodes)), defined(true), interrupt(interrupt) {}
-    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, bool interrupt = false) : name(id), parameters(std::move(parameters)), defined(false), interrupt(interrupt) {}
+    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, std::vector<std::unique_ptr<Node>> nodes, bool interrupt = false) : name(id), parameters(std::move(parameters)), body(std::move(nodes)), interrupt(interrupt), defined(true) {}
+    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, bool interrupt = false) : name(id), parameters(std::move(parameters)), interrupt(interrupt), defined(false) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
 
@@ -270,7 +271,8 @@ struct IfNode : Node
 {
     std::unique_ptr<Node> condition;
     std::vector<std::unique_ptr<Node>> body;
-    explicit IfNode(std::unique_ptr<Node> cond, std::vector<std::unique_ptr<Node>> nodes) : condition(std::move(cond)), body(std::move(nodes)) {}
+    std::vector<std::unique_ptr<Node>> elseBody;
+    explicit IfNode(std::unique_ptr<Node> cond, std::vector<std::unique_ptr<Node>> nodes, std::vector<std::unique_ptr<Node>> elseNodes = {}) : condition(std::move(cond)), body(std::move(nodes)), elseBody(std::move(elseNodes)) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
 

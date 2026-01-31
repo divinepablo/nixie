@@ -179,8 +179,7 @@ std::unique_ptr<MemberReferenceNode> Parser::parseMemberReference()
     consume(Type::IDENTIFIER);
 
     auto root = std::make_unique<MemberReferenceNode>(
-        std::make_unique<ReferenceNode>(baseName),
-        memberName
+        MemberReferenceNode(baseName, memberName)
     );
 
     // chain: a.b.c.d ... (not supported with current AST)
@@ -373,6 +372,11 @@ std::unique_ptr<IfNode> Parser::parseIf()
         auto condition = parseExpression();
         consume(Type::CLOSE_PAREN);
         auto block = parseBlock();
+        if (currentToken.type == Type::ELSE) {
+            consume(Type::ELSE);
+            auto elseBlock = parseBlock();
+            return std::make_unique<IfNode>(IfNode(std::move(condition),  std::move(block), std::move(elseBlock)));
+        }
         return std::make_unique<IfNode>(IfNode(std::move(condition), std::move(block)));
 }
 

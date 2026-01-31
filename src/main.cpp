@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include "codegen.hpp"
 
 std::string read_file(const std::string& filename) {
     std::ifstream file(filename);
@@ -38,6 +39,11 @@ int main(int argc, char* argv[]) {
         // }
         Parser parser(tokens);
         auto parsed = parser.parse();
+
+        // 4. Codegen
+        CodegenVisitor codegen;
+        parsed->accept(codegen);
+        codegen.generateO65();
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
