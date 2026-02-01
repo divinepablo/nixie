@@ -139,6 +139,16 @@ public:
         
         return maxBlock;
     }
+
+    size_t totalAllocated() const {
+        size_t count = 0;
+        for (size_t i = 0; i < 256; ++i) {
+            if (allocated[i]) {
+                ++count;
+            }
+        }
+        return count;
+    }
 };
 
 // Represents where a variable lives
@@ -203,6 +213,9 @@ struct ZeroPageAllocation {
 class CodegenVisitor : public Visitor
 {
 private:
+
+    friend class CodegenTestBase;
+    
     // --- Segment Buffers ---
     std::vector<uint8_t> textSegment; // Executable Code
     std::vector<uint8_t> dataSegment; // Initialized Global Data
@@ -218,7 +231,6 @@ private:
     std::vector<Scope> scopes;      // Stack of scopes
     std::map<std::string, StructInfo> structDefinitions; // Struct registry
     std::vector<Label> labels;      // Control flow labels
-    size_t labelCounter = 0;
     
 
     std::stack<EvaluationResult> evalStack;
@@ -311,7 +323,7 @@ private:
     }
 
     const std::vector<uint8_t> writeUndefinedReferences();
-    const std::vector<uint8_t> writeRelocationTable(const std::vector<o65::O65_Relocation_Entry> relocations);
+    const std::vector<uint8_t> writeRelocationTable(const std::vector<o65::O65_Relocation_Entry> relocations, const uint32_t base);
     const std::vector<uint8_t> writeExportedGlobals();
 
     // Emit function entry sequence (stack frame setup)

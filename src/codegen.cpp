@@ -503,19 +503,89 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
     }
 }
 
+const std::vector<uint8_t> CodegenVisitor::writeUndefinedReferences()
+{
+    std::vector<uint8_t> undef_bytes;
+    size_t total_size = undefinedList.size();
+    undef_bytes.push_back(static_cast<uint8_t>(total_size & 0xFF));
+    undef_bytes.push_back(static_cast<uint8_t>((total_size >> 8) & 0xFF)); // assuming little endian
+    for (const auto& name : undefinedList) {
+        // Write null-terminated string
+        for (char c : name) {
+            undef_bytes.push_back(static_cast<uint8_t>(c));
+        }
+        undef_bytes.push_back(0x00); // Null terminator
+    }
+
+    return undef_bytes;
+}
+
+const std::vector<uint8_t> CodegenVisitor::writeRelocationTable(const std::vector<o65::O65_Relocation_Entry> relocations, const uint32_t base)
+{
+    std::vector<uint8_t> reloc_bytes;
+
+    uint32_t last = base - 1;
+
+    for (auto &&reloc : relocations)
+    {
+        uint32_t offset = reloc.absolute_offset - last;
+        while (offset > RELOCATION_OFFSET_MAX) {
+            reloc_bytes.push_back(RELOCATION_OFFSET_CONTINUE);
+            offset -= RELOCATION_OFFSET_INCREMENT;
+        }
+        reloc_bytes.push_back(static_cast<uint8_t>(offset & 0xFF));
+
+        reloc_bytes.push_back(reloc.typebyte);
+
+        if (reloc.symbol_index) {
+            reloc_bytes.push_back(reloc.symbol_index);
+        }
+
+        if (reloc.low_byte) {
+            reloc_bytes.push_back(reloc.low_byte);
+        }
+        if (reloc.seg_offset) {
+            reloc_bytes.push_back(reloc.seg_offset & 0xFF);
+            reloc_bytes.push_back((reloc.seg_offset >> 8) * 0xFF); // little endian i think
+        }
+        last = reloc.absolute_offset;
+    }
+
+    reloc_bytes.push_back(RELOCATION_TABLE_TERMINATOR); 
+    
+
+    return reloc_bytes;
+}
+
 const std::vector<uint8_t> CodegenVisitor::writeExportedGlobals()
 {
     std::vector<uint8_t> global_bytes;
+    auto globals = scopes.front().symbols;
+    
+    size_t total_size = globals.size();
 
-    for (auto x : scopes.front().symbols) {
-        
+    global_bytes.push_back(static_cast<uint8_t>(total_size & 0xFF));
+    global_bytes.push_back(static_cast<uint8_t>((total_size >> 8) & 0xFF)); // assuming little endian
+    
+    for (auto x : globals) {
+        for (char c : x.first) {
+            global_bytes.push_back(static_cast<uint8_t>(c));
+        }
+        global_bytes.push_back(0x00u);
+
+        if (x.second.isConstant) { // very ghetto function check TODO: implement better check
+            global_bytes.push_back(static_cast<uint8_t>(SegmentID::TEXT));
+        } else {
+            global_bytes.push_back(static_cast<uint8_t>(SegmentID::DATA));
+        }
+
     }
     
 
     return global_bytes;
 }
 
-void CodegenVisitor::emitPrologue(size_t frameSize)
+void CodegenVisitor::emitPrologue(size_t)
 {
     auto frame_pointer = getZeroPageAllocation("__frame_pointer").value();
     emitOp(Opcodes::LDA_ZEROPAGE);
@@ -538,7 +608,7 @@ void CodegenVisitor::emitPrologue(size_t frameSize)
     emit(frame_pointer.address + 1);
 }
 
-void CodegenVisitor::emitEpilogue(size_t frameSize)
+void CodegenVisitor::emitEpilogue(size_t)
 {
     
     auto frame_pointer = getZeroPageAllocation("__frame_pointer").value();
@@ -645,9 +715,19 @@ uint32_t CodegenVisitor::calculateMemberOffset(const AstType &structType, const 
     return 0;
 }
 
-void CodegenVisitor::visit(Node &node)
+void CodegenVisitor::visit(Node &)
 {
     throw std::runtime_error("CodegenVisitor: Encounted unknown or unhandled AST node type.");
+}
+
+void CodegenVisitor::visit(IncludeNode &)
+{
+    return; // should be handled in earlier pass
+}
+
+void CodegenVisitor::visit(DefineNode &)
+{
+    return; // should be handled in earlier pass
 }
 
 void CodegenVisitor::visit(StringNode &node)
@@ -1072,7 +1152,7 @@ void CodegenVisitor::visit(StructureNode &node)
     structDefinitions.emplace(std::string(node.name), structDef);
 }
 
-void CodegenVisitor::visit(StructureInitNode &node)
+void CodegenVisitor::visit(StructureInitNode &)
 {
     throw std::runtime_error("Structure initialization not yet implemented"); // lmfao im not implementing this bullshit anytime soon 😂😂
 }
@@ -1089,6 +1169,7 @@ void CodegenVisitor::visit(VariableNode &node)
             if (result.location != ValueLocation::Immediate) {
                 throw std::runtime_error("Non-constant value assigned to variable initialization");
             }
+
             emitData(result.value);
         } else {
             // Default initialize to zero
@@ -1392,15 +1473,75 @@ void CodegenVisitor::visit(MemberReferenceNode &node)
     evalStack.push(result);
 }
 
+std::vector<uint8_t> serializeO65(const implementation_defined::O65_File_Layout &layout)
+{
+    std::vector<uint8_t> o65Data;
+
+    // Serialize Header
+    const O65_Header_16* header = reinterpret_cast<const O65_Header_16*>(layout.header);
+    const uint8_t* headerPtr = reinterpret_cast<const uint8_t*>(layout.header);
+    o65Data.insert(o65Data.end(), headerPtr, headerPtr + sizeof(O65_Header_16));
+
+    // Serialize Text Segment
+    o65Data.insert(o65Data.end(), layout.text_data, layout.text_data + header->tlen);
+
+    // Serialize Data Segment
+    o65Data.insert(o65Data.end(), layout.data_data, layout.data_data + header->dlen);
+
+    // Serialize Undefined References
+    o65Data.insert(o65Data.end(), layout.undef_refs.data, layout.undef_refs.data + layout.undef_refs.size_bytes);
+
+    // Serialize Exported Globals
+    o65Data.insert(o65Data.end(), layout.exported_globals.data, layout.exported_globals.data + layout.exported_globals.size_bytes);
+
+    o65Data.insert(o65Data.end(), layout.text_reloc.data, layout.text_reloc.data + layout.text_reloc.size_bytes);
+    o65Data.insert(o65Data.end(), layout.data_reloc.data, layout.data_reloc.data + layout.data_reloc.size_bytes);
+
+
+    return o65Data;
+}
+
 std::vector<uint8_t> CodegenVisitor::generateO65()
 {
     std::vector<uint8_t> o65Data;
     implementation_defined::O65_File_Layout layout;
+    O65_Header_16 header16{};
 
     layout.mode = getMode();
+
+    memcpy_s(header16.marker, 2, o65::NON_C64_MARKER, 2);
+    memcpy_s(header16.magic, 3, o65::MAGIC_NUMBER, 3);
+
+    header16.version = 0x00;
+    header16.mode = layout.mode.encode();
+    header16.tbase = 0x0000; // Text segment load address (set by loader)
+    header16.dbase = 0x0000; // Data segment load address (set by loader)
+    header16.zbase = 0x0000; // Zero page segment load address (set by loader)
+    header16.bbase = 0x0000; // BSS segment load address (set by loader)
+    header16.tlen = static_cast<uint16_t>(textSegment.size());
+    header16.dlen = static_cast<uint16_t>(dataSegment.size());
+    header16.zlen = static_cast<uint16_t>(zeroPageAllocator.totalAllocated());
+    header16.blen = 0x0000; // BSS size (not used) TODO: properly implement BSS
+    header16.stack = 0x0000; // unknown (need to calc later)
+
+    layout.header = reinterpret_cast<O65_Header_16*>(&header16);
+    
     layout.text_data = textSegment.data();
     layout.data_data = dataSegment.data();
-    layout.next_section = nullptr;
+
+    auto undef = writeUndefinedReferences();
+    auto globals = writeExportedGlobals();
+    auto text_reloc = writeRelocationTable(textRelocs, header16.tbase);
+    auto data_reloc = writeRelocationTable(textRelocs, header16.dbase);
+
+    layout.undef_refs = implementation_defined::O65_Table_View{undef.data(), static_cast<uint32_t>(undef.size())};
+    layout.text_reloc = implementation_defined::O65_Table_View{text_reloc.data(), static_cast<uint32_t>(text_reloc.size())};
+    layout.data_reloc = implementation_defined::O65_Table_View{data_reloc.data(), static_cast<uint32_t>(data_reloc.size())};
+    layout.exported_globals = implementation_defined::O65_Table_View{globals.data(), static_cast<uint32_t>(globals.size())};
+
+    layout.next_section = nullptr; // not implemented yet
+
+    o65Data = serializeO65(layout);
 
     return o65Data;
 }

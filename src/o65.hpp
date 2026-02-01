@@ -523,6 +523,7 @@ struct O65_Header_Option {
 // Section 2.6.1: Fixed header layout
 // =============================================================================
 
+
 /**
  * @brief o65 file header (16-bit size mode)
  * 
@@ -1162,6 +1163,11 @@ struct O65_Segment_Descriptor {
     }
 };
 
+struct O65_Table_View {
+    const uint8_t* data;
+    size_t size_bytes; // Pre-calculated during the initial parse
+};
+
 /**
  * @brief Complete file layout descriptor
  * 
@@ -1180,10 +1186,10 @@ struct O65_File_Layout {
     const uint8_t* data_data;
     
     // Relocation and symbol tables
-    const uint8_t* undef_refs;
-    const uint8_t* text_reloc;
-    const uint8_t* data_reloc;
-    const uint8_t* exported_globals;
+    O65_Table_View undef_refs;
+    O65_Table_View text_reloc;
+    O65_Table_View data_reloc;
+    O65_Table_View exported_globals;
     
     // Next file in chain (null if not chained)
     const O65_File_Layout* next_section;
