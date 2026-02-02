@@ -38,9 +38,20 @@ set(gtest_force_shared_crt
     CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(compiler_tests tests/lexer_tests.cpp tests/parser_tests.cpp src/lexer.cpp src/parser.cpp)
+add_executable(compiler_tests
+    tests/lexer_tests.cpp
+    tests/parser_tests.cpp
+    tests/codegen_tests.cpp
+    tests/codegen_segments_tests.cpp
+    tests/codegen_zeropage_tests.cpp
+    tests/codegen_o65_tests.cpp
+    tests/codegen_integration_tests.cpp
+    src/lexer.cpp
+    src/parser.cpp
+    src/codegen.cpp
+)
 
-target_include_directories(compiler_tests PRIVATE include)
+target_include_directories(compiler_tests PRIVATE include src)
 if(MSVC)
   target_compile_options(compiler_tests PRIVATE /WX-)
 else()

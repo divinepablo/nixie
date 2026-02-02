@@ -385,24 +385,23 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
         case TypeKind::SIGNED_8:
         case TypeKind::BOOLEAN:
             // 8-bit store
-            emitOp(Opcodes::LDA_IMMEDIATE);
-            emit(static_cast<uint8_t>(value & 0xFF));
+
             
             if (storage == StorageClass::Global) {
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>(value & 0xFF));
                 emitOp(Opcodes::STA_ABSOLUTE); // 0x8D
                 emitWord(static_cast<uint16_t>(offset));
                 addTextReloc(RelocationType::WORD, SegmentID::DATA);
             } else if (storage == StorageClass::ZeroPage) {
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>(value & 0xFF));
                 emitOp(Opcodes::STA_ZEROPAGE); // 0x85
                 emit(static_cast<uint8_t>(offset & 0xFF));
             } else if (storage == StorageClass::Stack) {
-                auto temp = getZeroPageAllocation("__temporary").value().address;
+                // auto temp = getZeroPageAllocation("__temporary").value().address;
                 auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
                 auto fp = getZeroPageAllocation("__frame_pointer").value().address;
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 
                 emitOp(Opcodes::LDA_ZEROPAGE);
                 emit(fp);
@@ -428,16 +427,19 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
                 emit(temp2 + 1);
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>(value & 0xFF));
+
                 emitOp(Opcodes::LDY_IMMEDIATE);
                 emit(0x00);
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
                 emit(temp2);
 
                 emitOp(Opcodes::PHA);
 
                 emitOp(Opcodes::LDY_IMMEDIATE);
                 emit(0x01);
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
                 emit(temp2);
                 emitOp(Opcodes::TAX);
 
@@ -454,27 +456,79 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
             // 16-bit store - low byte then high byte
             
             // Store low byte
-            emitOp(Opcodes::LDA_IMMEDIATE);
-            emit(static_cast<uint8_t>(value & 0xFF));
             
             if (storage == StorageClass::Global) {
+            emitOp(Opcodes::LDA_IMMEDIATE);
+            emit(static_cast<uint8_t>(value & 0xFF));
                 emitOp(Opcodes::STA_ABSOLUTE);
                 emitWord(static_cast<uint16_t>(offset));
                 addTextReloc(RelocationType::WORD, SegmentID::DATA);
             } else if (storage == StorageClass::ZeroPage) {
+                
+            emitOp(Opcodes::LDA_IMMEDIATE);
+            emit(static_cast<uint8_t>(value & 0xFF));
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(static_cast<uint8_t>(offset & 0xFF));
+            } else if (storage == StorageClass::Stack) {
+                                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
+                auto fp = getZeroPageAllocation("__frame_pointer").value().address;
+
+                emitOp(Opcodes::LDA_ZEROPAGE);
+                emit(fp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                emitOp(Opcodes::SEC);
+                
+                emitOp(Opcodes::SBC_IMMEDIATE);
+                emit(offset & 0xFF);
+                
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                emitOp(Opcodes::LDA_ZEROPAGE);
+                emit(fp+1);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                emitOp(Opcodes::SBC_IMMEDIATE);
+                emit(0x00);
+
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp2 + 1);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>(value & 0xFF));
+
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x00);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                emit(temp2);
+
+
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>((value >> 8) & 0xFF));
+
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x01);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                emit(temp2);
+
             }
             
             // Store high byte
-            emitOp(Opcodes::LDA_IMMEDIATE);
-            emit(static_cast<uint8_t>((value >> 8) & 0xFF));
             
             if (storage == StorageClass::Global) {
+                
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>((value >> 8) & 0xFF));
                 emitOp(Opcodes::STA_ABSOLUTE);
                 emitWord(static_cast<uint16_t>(offset + 1));
                 addTextReloc(RelocationType::WORD, SegmentID::DATA);
             } else if (storage == StorageClass::ZeroPage) {
+                
+            emitOp(Opcodes::LDA_IMMEDIATE);
+            emit(static_cast<uint8_t>((value >> 8) & 0xFF));
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(static_cast<uint8_t>((offset + 1) & 0xFF));
             }
@@ -652,6 +706,30 @@ void CodegenVisitor::loadIntoRegister(const EvaluationResult &source)
             }
             break;
         }
+        case ValueLocation::DereferencedPointer: {
+            // source.value contains the zero page address where the pointer is stored
+            uint8_t zpAddr = static_cast<uint8_t>(source.value & 0xFF);
+            
+            // Load through indirect addressing: LDA (zp),Y with Y=0
+            emitOp(Opcodes::LDY_IMMEDIATE);
+            emit(0x00);
+            emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+            emit(zpAddr);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            if (is16Bit) {
+                // Save low byte, load high byte
+                emitOp(Opcodes::PHA);
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x01);
+                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emit(zpAddr);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::TAX);
+                emitOp(Opcodes::PLA);
+            }
+            break;
+        }
         case ValueLocation::Accumulator:
             break;
     }
@@ -783,6 +861,85 @@ void CodegenVisitor::visit(NumberNode &node)
 
 void CodegenVisitor::visit(UnaryNode &node)
 {
+    // Handle REFERENCE operator specially - we need the address, not the value
+    if (node.operation == UnaryOperator::REFERENCE) {
+        if (auto* refNode = dynamic_cast<ReferenceNode*>(node.expression.get())) {
+            std::string name = std::string(refNode->name);
+            auto sym = findSymbol(name);
+            if (!sym.has_value()) {
+                throw std::runtime_error("Undefined variable: " + name);
+            }
+            auto& symbol = sym.value();
+            
+            // Create a pointer type from the variable's type
+            AstType ptrType = AstType::PointerTo(symbol.type);
+            
+            switch (symbol.storage) {
+                case StorageClass::Global:
+                    // Address is the data segment offset
+                    evalStack.push(EvaluationResult {
+                        ValueLocation::DataSegment,  
+                        static_cast<uint32_t>(symbol.offset), 
+                        ptrType
+                    });
+                    break;
+                    
+                case StorageClass::ZeroPage:
+                    // Address is the zero page offset - fits in 16-bit pointer
+                    emitOp(Opcodes::LDA_IMMEDIATE);
+                    emit(static_cast<uint8_t>(symbol.offset & 0xFF));
+                    emitOp(Opcodes::LDX_IMMEDIATE);
+                    emit(0x00); // High byte is 0 for zero page
+                    evalStack.push(EvaluationResult {
+                        ValueLocation::Accumulator,
+                        static_cast<uint32_t>(symbol.offset),
+                        ptrType
+                    });
+                    break;
+                    
+                case StorageClass::Stack: {
+                    // Address is computed from frame pointer
+                    auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+                    auto fp = getZeroPageAllocation("__frame_pointer").value().address;
+                    
+                    // Compute FP - offset
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::SEC);
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(static_cast<uint8_t>((-symbol.offset) & 0xFF));
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp + 1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(0x00);
+                    emitOp(Opcodes::TAX);
+                    
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(temp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    
+                    evalStack.push(EvaluationResult {
+                        ValueLocation::Accumulator,
+                        0, // Address is in A/X
+                        ptrType
+                    });
+                    break;
+                }
+                    
+                default:
+                    throw std::runtime_error("Cannot take reference of this storage class");
+            }
+            return;
+        }
+        // For other expressions, fall through to normal handling
+    }
+    
     node.expression->accept(*this);
 
     auto result = evalStack.top();
@@ -805,22 +962,85 @@ void CodegenVisitor::visit(UnaryNode &node)
         emit(0x01);
         break;
     }
-    case UnaryOperator::REFERENCE: {
-        if (result.location == ValueLocation::DataSegment) {
-            evalStack.push(EvaluationResult {ValueLocation::Immediate, result.value, AstType::PointerTo(result.type)});
+    // case UnaryOperator::REFERENCE: {
+    //     // Taking the address of a value - result is a pointer
+    //     // The result.value already contains the offset/address from the ReferenceNode visitor
+    //     if (result.location == ValueLocation::DataSegment || 
+    //         result.location == ValueLocation::Immediate) {
+    //         // For global data segment variables, result.value is the offset in data segment
+    //         evalStack.push(EvaluationResult {ValueLocation::Immediate, result.value, AstType::PointerTo(result.type)});
+    //     } else if (result.location == ValueLocation::Accumulator) {
+    //         // The address was loaded into A (and possibly X for 16-bit)
+    //         // This typically happens for zero page or other already-computed addresses
+    //         evalStack.push(EvaluationResult {ValueLocation::Accumulator, result.value, AstType::PointerTo(result.type)});
+    //     } else {
+    //         throw std::runtime_error("Cannot take reference of this value location");
+    //     }
+    //     break;
+    // }
+        case UnaryOperator::DEREFERENCE: {
+        // For dereference, we need to preserve the pointer value itself
+        // so it can be used for both reading and writing
+        // The result type needs to have its pointer level decremented
+        AstType dereferenced = result.type.decayPointer();
+        
+        auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+        
+        if (result.location == ValueLocation::Immediate) {
+            // Pointer is a constant address - load it into zero page temp
+            emitOp(Opcodes::LDA_IMMEDIATE);
+            emit(result.value & 0xFF);
+            emitOp(Opcodes::STA_ZEROPAGE);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            emitOp(Opcodes::LDA_IMMEDIATE);
+            emit((result.value >> 8) & 0xFF);
+            emitOp(Opcodes::STA_ZEROPAGE);
+            emit(temp + 1);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
+                            static_cast<uint32_t>(temp), 
+                            dereferenced});
+        } else if (result.location == ValueLocation::DataSegment) {
+            // Pointer is stored in data segment - load pointer value into temp
+            emitOp(Opcodes::LDA_ABSOLUTE);
+            emitWord(static_cast<uint16_t>(result.value));
+            addTextReloc(RelocationType::WORD, SegmentID::DATA);
+            emitOp(Opcodes::STA_ZEROPAGE);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            emitOp(Opcodes::LDA_ABSOLUTE);
+            emitWord(static_cast<uint16_t>(result.value + 1));
+            addTextReloc(RelocationType::WORD, SegmentID::DATA);
+            emitOp(Opcodes::STA_ZEROPAGE);
+            emit(temp + 1);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
+                            static_cast<uint32_t>(temp), 
+                            dereferenced});
+        } else if (result.location == ValueLocation::Accumulator) {
+            // Pointer value is already in A (low) and X (high)
+            emitOp(Opcodes::STA_ZEROPAGE);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            emitOp(Opcodes::STX_ZEROPAGE);
+            emit(temp + 1);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
+                            static_cast<uint32_t>(temp), 
+                            dereferenced});
+        } else {
+            throw std::runtime_error("Cannot dereference this value location");
         }
         break;
     }
-    case UnaryOperator::DEREFERENCE: {
-        emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
-        emit(result.value);
-        AstType dereferenced(result.type);
-        dereferenced.decayPointer();
-        evalStack.push(EvaluationResult {ValueLocation::Accumulator, 0, dereferenced});
-        break;
-    }
-    
-    default:
+        
+        default:
         break;
     }
 }
@@ -839,6 +1059,52 @@ void CodegenVisitor::visit(BoolNode& node)
 
 void CodegenVisitor::visit(AssignmentNode &node)
 {
+    // Check if this is a dereference assignment (@ptr = value)
+    if (auto* unaryNode = dynamic_cast<UnaryNode*>(node.assignee.get())) {
+        if (unaryNode->operation == UnaryOperator::DEREFERENCE) {
+            // First evaluate the pointer expression
+            unaryNode->expression->accept(*this);
+            EvaluationResult ptrResult = evalStack.top();
+            evalStack.pop();
+            
+            // Store pointer in zero page temp
+            auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+            loadIntoRegister(ptrResult);
+            emitOp(Opcodes::STA_ZEROPAGE);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            emitOp(Opcodes::STX_ZEROPAGE);
+            emit(temp + 1);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            // Now evaluate the expression to assign
+            node.expression->accept(*this);
+            EvaluationResult exprResult = evalStack.top();
+            evalStack.pop();
+            
+            // Load expression value into accumulator
+            loadIntoRegister(exprResult);
+            
+            // Store through pointer indirection: STA (zp),Y with Y=0
+            emitOp(Opcodes::LDY_IMMEDIATE);
+            emit(0x00);
+            emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            
+            // Handle 16-bit stores: STA (zp),Y with Y=1
+            if (getSizeOfType(exprResult.type) == 2) {
+                emitOp(Opcodes::TXA);
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x01);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            }
+            return;
+        }
+    }
+
     node.expression->accept(*this);
     EvaluationResult exprResult = evalStack.top();
     evalStack.pop();
@@ -888,15 +1154,21 @@ void CodegenVisitor::visit(BinaryOperationNode &node)
 
     loadIntoRegister(rightResult);
 
+    auto temp = getZeroPageAllocation("__temporary").value().address;
+    auto temp2 = getZeroPageAllocation("__temporary_dos").value().address;
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(0);
+    emit(temp);
     addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
 
     
     if (is16BitArith && !isRight16) {
-        emitOp(Opcodes::STX_ZEROPAGE);
+        emitOp(Opcodes::PHX);
+        emitOp(Opcodes::LDX_IMMEDIATE);
         emit(0);
+        emitOp(Opcodes::STX_ZEROPAGE);
+        emit(temp2);
         addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::PLX);
     }
     
     popRegister(leftResult.type);
@@ -911,13 +1183,13 @@ void CodegenVisitor::visit(BinaryOperationNode &node)
         case Operator::ADD: {
             emitOp(Opcodes::CLC);
             emitOp(Opcodes::ADC_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emit(Opcodes::PHA);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::ADC_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitOp(Opcodes::TAX);
             }
@@ -927,13 +1199,13 @@ void CodegenVisitor::visit(BinaryOperationNode &node)
         case Operator::SUBTRACT: {
             emitOp(Opcodes::SEC);
             emitOp(Opcodes::SBC_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emit(Opcodes::PHA);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::SBC_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitOp(Opcodes::TAX);
             }
@@ -972,17 +1244,24 @@ void CodegenVisitor::visit(ComparisonNode &node)
     bool isLeft16 = getSizeOfType(leftResult.type) > 1;
     bool isRight16 = getSizeOfType(rightResult.type) > 1;
 
+    auto temp = getZeroPageAllocation("__temporary").value().address;
+    auto temp2 = getZeroPageAllocation("__temporary_dos").value().address;
+    
     loadIntoRegister(rightResult);
 
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(0);
+    emit(temp);
     addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
 
     
     if (is16BitArith && !isRight16) {
-        emitOp(Opcodes::STX_ZEROPAGE);
+        emitOp(Opcodes::PHX);
+        emitOp(Opcodes::LDX_IMMEDIATE);
         emit(0);
+        emitOp(Opcodes::STX_ZEROPAGE);
+        emit(temp2);
         addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::PLX);
     }
     
     popRegister(leftResult.type);
@@ -997,13 +1276,13 @@ void CodegenVisitor::visit(ComparisonNode &node)
     switch (node.comparison) {
         case Comparison::EQUALS: {
             emitOp(Opcodes::CMP_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emitJump(Opcodes::BNE, not_is_a_keyword);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::CMP_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitJump(Opcodes::BEQ, equal);
             }
@@ -1011,13 +1290,13 @@ void CodegenVisitor::visit(ComparisonNode &node)
         }
         case Comparison::NOT_EQUAL: {
             emitOp(Opcodes::CMP_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emitJump(Opcodes::BEQ, not_is_a_keyword);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::CMP_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitJump(Opcodes::BNE, equal);
             }
@@ -1025,13 +1304,13 @@ void CodegenVisitor::visit(ComparisonNode &node)
         }
         case Comparison::LESS_THAN: {
             emitOp(Opcodes::CMP_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emitJump(Opcodes::BNE, not_is_a_keyword);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::CMP_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitJump(Opcodes::BNE, not_is_a_keyword);
             }
@@ -1039,13 +1318,13 @@ void CodegenVisitor::visit(ComparisonNode &node)
         }
         case Comparison::GREATER_THAN: {
             emitOp(Opcodes::CMP_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emitJump(Opcodes::BCC, not_is_a_keyword);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::CMP_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitJump(Opcodes::BCC, not_is_a_keyword);
             }
@@ -1053,14 +1332,14 @@ void CodegenVisitor::visit(ComparisonNode &node)
         }
         case Comparison::LESS_THAN_EQUAL: {
             emitOp(Opcodes::CMP_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emitJump(Opcodes::BCC, equal);
             emitJump(Opcodes::BEQ, equal);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::CMP_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitJump(Opcodes::BCC, equal);
                 emitJump(Opcodes::BEQ, equal);
@@ -1070,14 +1349,14 @@ void CodegenVisitor::visit(ComparisonNode &node)
         }
         case Comparison::GREATER_THAN_EQUAL: {
             emitOp(Opcodes::CMP_ZEROPAGE);
-            emit(0);
+            emit(temp);
             addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
             emitJump(Opcodes::BNE, equal);
             emitJump(Opcodes::BEQ, equal);
             if (is16BitArith) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::CMP_ZEROPAGE);
-                emit(0);
+                emit(temp2);
                 addTextReloc(o65::RelocationType::LOW, SegmentID::ZERO);
                 emitJump(Opcodes::BNE, equal);
                 emitJump(Opcodes::BEQ, equal);
@@ -1238,9 +1517,7 @@ void CodegenVisitor::visit(ReferenceNode &node)
                 emit(temp2 + 1);
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 
-                emitOp(Opcodes::LDY_IMMEDIATE);
-                emit(0x00);
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
                 emit(temp2);
 
             } else if (typeSize == 2) {
@@ -1277,8 +1554,8 @@ void CodegenVisitor::visit(ReferenceNode &node)
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 
                 emitOp(Opcodes::LDY_IMMEDIATE);
-                emit(0x00);
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+
+                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
                 emit(temp2);
 
                 emitOp(Opcodes::PHA);

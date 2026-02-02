@@ -194,7 +194,8 @@ struct Label {
 enum class ValueLocation {
     Accumulator,   // Value is in A register
     DataSegment,   // Value is at data segment offset (for strings/constants)
-    Immediate      // Value is a compile-time constant
+    Immediate,      // Value is a compile-time constant
+    DereferencedPointer // Value is at address pointed to by a pointer
 };
 
 
