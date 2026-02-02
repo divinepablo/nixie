@@ -93,6 +93,21 @@ std::vector<Token> Lexer::tokenize()
             advance();
             continue;
         }
+        if (c == '\'')
+        {
+            advance(); // skip opening '
+            if (is_eof()) {
+                throw std::runtime_error("Unterminated character literal");
+            }
+            size_t charStart = cursor;
+            advance(); // consume character
+            if (is_eof() || peek() != '\'') {
+                throw std::runtime_error("Unterminated character literal");
+            }
+            advance(); // skip closing '
+            tokens.push_back({Type::CHARACTER, source.substr(charStart, 1)});
+            continue;
+        }
 
         if (std::isalnum(c) || c == '_')
         {
@@ -121,6 +136,12 @@ std::vector<Token> Lexer::tokenize()
                 tokens.push_back({Type::INTERRUPT, word});
             else if (word == "__zeropage")
                 tokens.push_back({Type::ZEROPAGE, word});
+            else if (word == "nmi")
+                tokens.push_back({Type::NMI, word});
+            else if (word == "irq")
+                tokens.push_back({Type::IRQ, word});
+            else if (word == "reset")
+                tokens.push_back({Type::RESET, word});
             else if (word == "u8")
                 tokens.push_back({Type::TYPE_UNSIGNED_8, word});
             else if (word == "u16")

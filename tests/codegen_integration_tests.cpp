@@ -418,7 +418,7 @@ TEST_F(CodegenIntegrationTestFull, InterruptHandler_RTI) {
     body.push_back(makeNumber(0));
     
     // Create interrupt handler
-    auto handler = makeFunction("nmi_handler", params, std::move(body), true);
+    auto handler = makeFunction("nmi_handler", params, std::move(body), InterruptType::NMI);
     visitor.visit(*handler);
     
     const auto& text = getTextSegment();
@@ -439,7 +439,7 @@ TEST_F(CodegenIntegrationTestFull, MixedFunctions_RegularAndInterrupt) {
     
     // Interrupt handler
     std::vector<std::unique_ptr<Node>> irqBody;
-    auto irqFunc = makeFunction("irq_handler", params, std::move(irqBody), true);
+    auto irqFunc = makeFunction("irq_handler", params, std::move(irqBody), InterruptType::IRQ);
     visitor.visit(*irqFunc);
     
     const auto& text = getTextSegment();

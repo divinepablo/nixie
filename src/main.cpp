@@ -43,7 +43,18 @@ int main(int argc, char* argv[]) {
         // 4. Codegen
         CodegenVisitor codegen;
         parsed->accept(codegen);
-        codegen.generateO65();
+
+        // 5. Output binary
+        auto binary = codegen.generateO65();
+        auto out_filename = std::string(argv[1]);
+        size_t dot_pos = out_filename.find_last_of('.');
+        if (dot_pos != std::string::npos) {
+            out_filename = out_filename.substr(0, dot_pos);
+        }
+        out_filename += ".o65";
+        std::ofstream outfile(out_filename, std::ios::binary);
+        outfile.write(reinterpret_cast<const char*>(binary.data()), binary.size());
+        std::cout << "Compilation successful! Output written to " << out_filename << "\n";
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

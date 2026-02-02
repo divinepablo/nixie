@@ -321,12 +321,54 @@ void CodegenVisitor::loadVariableToRegister(const SymbolInfo &sym, const std::st
             addTextReloc(RelocationType::WORD, SegmentID::DATA);
             break;
             
-        case StorageClass::Stack:
-            // Load from stack frame (6502 doesn't have native stack addressing)
-            // Need to compute effective address and load
-            // This is complex - simplified version:
-            throw std::runtime_error("Stack variable access not yet implemented");
+        case StorageClass::Stack: {
+            // Load from stack frame using frame pointer indirect addressing
+            // Stack variables have negative offsets from frame pointer
+            // We use LDA (zp),Y where zp = frame pointer and Y = offset
+            auto fp = getZeroPageAllocation("__frame_pointer").value().address;
+            
+            // For positive offsets (parameters), we can use (FP),Y directly
+            // For negative offsets (locals), we need to compute FP - offset into temp
+            if (sym.offset >= 0) {
+                // Parameter - positive offset from FP
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(static_cast<uint8_t>(sym.offset));
+                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emit(fp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            } else {
+                // Local variable - negative offset, need to compute address
+                auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+                
+                // temp = FP - |offset|
+                emitOp(Opcodes::SEC);
+                emitOp(Opcodes::LDA_ZEROPAGE);
+                emit(fp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::SBC_IMMEDIATE);
+                emit(static_cast<uint8_t>((-sym.offset) & 0xFF));
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                emitOp(Opcodes::LDA_ZEROPAGE);
+                emit(fp + 1);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::SBC_IMMEDIATE);
+                emit(0x00);
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp + 1);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                // Now load through temp
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x00);
+                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            }
             break;
+        }
             
         case StorageClass::ZeroPage:
             // LDA zeropage
@@ -358,9 +400,62 @@ void CodegenVisitor::saveRegisterToVariable(const SymbolInfo& sym,
             addTextReloc(RelocationType::WORD, SegmentID::DATA);
             break;
             
-        case StorageClass::Stack:
-            throw std::runtime_error("Stack variable access not yet implemented");
+        case StorageClass::Stack: {
+            // Store to stack frame using frame pointer indirect addressing
+            auto fp = getZeroPageAllocation("__frame_pointer").value().address;
+            
+            if (sym.offset >= 0) {
+                // Parameter - positive offset from FP
+                // Save A first, then use it for addressing
+                emitOp(Opcodes::PHA);
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(static_cast<uint8_t>(sym.offset));
+                emitOp(Opcodes::PLA);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                emit(fp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            } else {
+                // Local variable - negative offset
+                auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+                auto tempA = getZeroPageAllocation("__temporary").value().address;
+                
+                // Save A to temp
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(tempA);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                // Compute FP - |offset| into temp2
+                emitOp(Opcodes::SEC);
+                emitOp(Opcodes::LDA_ZEROPAGE);
+                emit(fp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::SBC_IMMEDIATE);
+                emit(static_cast<uint8_t>((-sym.offset) & 0xFF));
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                emitOp(Opcodes::LDA_ZEROPAGE);
+                emit(fp + 1);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::SBC_IMMEDIATE);
+                emit(0x00);
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp + 1);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                // Load A back and store through temp
+                emitOp(Opcodes::LDA_ZEROPAGE);
+                emit(tempA);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x00);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            }
             break;
+        }
             
         case StorageClass::ZeroPage:
             // STA zeropage
@@ -633,6 +728,9 @@ const std::vector<uint8_t> CodegenVisitor::writeExportedGlobals()
             global_bytes.push_back(static_cast<uint8_t>(SegmentID::DATA));
         }
 
+        global_bytes.push_back(static_cast<uint8_t>(x.second.offset & 0xFF));
+        global_bytes.push_back(static_cast<uint8_t>((x.second.offset >> 8) & 0xFF)); // little endian
+
     }
     
 
@@ -795,7 +893,7 @@ uint32_t CodegenVisitor::calculateMemberOffset(const AstType &structType, const 
 
 void CodegenVisitor::visit(Node &)
 {
-    throw std::runtime_error("CodegenVisitor: Encounted unknown or unhandled AST node type.");
+    throw std::runtime_error("CodegenVisitor: Encountered unknown or unhandled AST node type.");
 }
 
 void CodegenVisitor::visit(IncludeNode &)
@@ -1212,10 +1310,20 @@ void CodegenVisitor::visit(BinaryOperationNode &node)
             emitOp(Opcodes::PLA);
             break;
         }
-        case Operator::MULTIPLY: { // TODO: create libraries for multiplication and division (not in 65c02 instructions)
+        case Operator::MULTIPLY: {
+            // 8-bit multiplication: A * temp -> A:X (low:high)
+            // Left operand is in A, right operand is in temp
+            // Use shift-and-add or table-based multiply
+            #ifdef USE_TABLE_MULTIPLY
+            emitMultiply8Table();
+            #else
+            emitMultiply8Shift();
+            #endif
             break;
         }
         case Operator::DIVIDE: {
+            // 8-bit division: A / temp -> A (quotient), X (remainder)
+            emitDivide8();
             break;
         }
         case Operator::UNKNOWN:
@@ -1386,34 +1494,84 @@ void CodegenVisitor::visit(FunctionNode &node)
 {
     auto name = std::string(node.name);
     if (node.defined) {
-        SymbolInfo symbol{name, AstType::Primitive(TypeKind::UNKNOWN), StorageClass::Global, static_cast<int32_t>(textSegment.size()), true, 2}; // TODO: change with void, idk if size matters ngl
+        SymbolInfo symbol{name, AstType::Primitive(TypeKind::UNKNOWN), StorageClass::Global, static_cast<int32_t>(textSegment.size()), true, false, 2};
 
         exportedGlobals.push_back(std::make_pair(name, static_cast<int32_t>(textSegment.size())));
+        
+        // Track interrupt handler assignments for vector table
+        switch (node.interruptType) {
+            case InterruptType::NMI:
+                nmiHandler = name;
+                break;
+            case InterruptType::RESET:
+                resetHandler = name;
+                break;
+            case InterruptType::IRQ:
+                irqHandler = name;
+                break;
+            case InterruptType::NONE:
+                break;
+        }
         
         enterScope();
         currentStackDepth = 0;
         currentFunction = symbol;
-        auto frameSize = node.parameters.size(); // TODO: proper frame size calculation
-        emitPrologue(frameSize); 
+        currentFunctionIsInterrupt = node.isInterrupt();
+        
+        // Calculate frame size from parameters
+        size_t frameSize = 0;
+        for (const auto& [paramName, paramType] : node.parameters) {
+            frameSize += getSizeOfType(paramType);
+        }
+        
+        if (node.isInterrupt()) { 
+            // Save registers for interrupt handler
+            emitOp(Opcodes::PHA);
+            emitOp(Opcodes::PHX);
+            emitOp(Opcodes::PHY);
+        } 
+        else {
+            emitPrologue(frameSize);
+            
+            // Declare parameters as stack variables
+            // Parameters are pushed right-to-left, so first param is closest to FP
+            int32_t paramOffset = 4; // Skip saved FP (2) + return addr (2)
+            for (const auto& [paramName, paramType] : node.parameters) {
+                size_t paramSize = getSizeOfType(paramType);
+                SymbolInfo paramSym{std::string(paramName), paramType, StorageClass::Stack, paramOffset, false, false, paramSize};
+                scopes.back().symbols[std::string(paramName)] = paramSym;
+                paramOffset += paramSize;
+            }
+        }
 
         for (auto &&n : node.body)
         {
             n->accept(*this);
         }
         
-
-        emitEpilogue(frameSize);
-
-        if (node.interrupt) {
-            emitOp(Opcodes::RTI);
-        } else {
+        // Only emit epilogue if not already returned
+        if (!node.isInterrupt()) {
+            emitEpilogue(frameSize);
             emitOp(Opcodes::RTS);
+        } else {
+            // Restore registers for interrupt handler
+            emitOp(Opcodes::PLY);
+            emitOp(Opcodes::PLX);
+            emitOp(Opcodes::PLA);
+            emitOp(Opcodes::RTI);
         }
 
         exitScope();
+        currentFunctionIsInterrupt = false;
     } else {
-        // getOrCreateUndefinedReference("_" + name);
-        // NGL idk wtf to do here
+        size_t undefIndex = getOrCreateUndefinedReference(name);
+        
+        // Register symbol so it can be called
+        SymbolInfo symbol{name, AstType::Primitive(TypeKind::UNKNOWN), 
+                         StorageClass::Global, 
+                         static_cast<int32_t>(undefIndex),
+                         true, true, 2}; // isExternal = true
+        scopes.back().symbols[name] = symbol;
     }
 }
 
@@ -1431,9 +1589,44 @@ void CodegenVisitor::visit(StructureNode &node)
     structDefinitions.emplace(std::string(node.name), structDef);
 }
 
-void CodegenVisitor::visit(StructureInitNode &)
+void CodegenVisitor::visit(StructureInitNode &node)
 {
-    throw std::runtime_error("Structure initialization not yet implemented"); // lmfao im not implementing this bullshit anytime soon 😂😂
+    // Structure initialization creates a compound value in the data segment
+    // Each member is initialized in order
+    
+    // For global initialization, emit member values to data segment
+    // For local initialization, this would push values onto stack
+    
+    size_t startOffset = dataSegment.size();
+    
+    // We need the struct type info - but StructureInitNode doesn't have type info
+    // This needs to be inferred from context (variable declaration)
+    // For now, emit members in declaration order with their values
+    
+    for (const auto& [memberName, memberExpr] : node.members) {
+        if (memberExpr) {
+            memberExpr->accept(*this);
+            auto result = evalStack.top();
+            evalStack.pop();
+            
+            if (result.location == ValueLocation::Immediate) {
+                // Emit the value to data segment
+                size_t size = getSizeOfType(result.type);
+                for (size_t i = 0; i < size; ++i) {
+                    emitData(static_cast<uint8_t>((result.value >> (i * 8)) & 0xFF));
+                }
+            } else {
+                throw std::runtime_error("Non-constant value in structure initializer for member: " + std::string(memberName));
+            }
+        }
+    }
+    
+    // Push result as data segment location
+    EvaluationResult result{};
+    result.location = ValueLocation::DataSegment;
+    result.value = static_cast<uint32_t>(startOffset);
+    result.type = AstType::Primitive(TypeKind::STRUCTURE);
+    evalStack.push(result);
 }
 
 void CodegenVisitor::visit(VariableNode &node)
@@ -1633,7 +1826,7 @@ void CodegenVisitor::visit(CallNode &node)
     auto funcSymOpt = findSymbol(std::string(node.name));
 
     if (!funcSymOpt.has_value()) {
-        throw std::runtime_error("Undefined function: " + std::string(node.name));
+        throw std::runtime_error("Undeclared function: " + std::string(node.name));
     }
 
     for (auto&& param : node.parameters) {
@@ -1645,6 +1838,18 @@ void CodegenVisitor::visit(CallNode &node)
 
     emitOp(Opcodes::JSR);
     emitWord(static_cast<uint16_t>(funcSymOpt->offset));
+    if (funcSymOpt->isExternal) {
+        // Emit JSR with relocation to undefined symbol
+        emitOp(Opcodes::JSR);
+        emitWord(0x0000); // Placeholder
+        // Add relocation entry pointing to undefined symbol
+        addTextReloc(RelocationType::WORD, SegmentID::UNDEFINED);
+        // The relocation entry needs the symbol index
+        textRelocs.back().symbol_index = funcSymOpt->offset; // undefined index
+    } else {
+        emitOp(Opcodes::JSR);
+        emitWord(static_cast<uint16_t>(funcSymOpt->offset));
+    }
 
     pushRegister(AstType::Primitive(TypeKind::UNSIGNED_16)); // Return address pushed onto stack
 }
@@ -1750,7 +1955,7 @@ void CodegenVisitor::visit(MemberReferenceNode &node)
     evalStack.push(result);
 }
 
-std::vector<uint8_t> serializeO65(const implementation_defined::O65_File_Layout &layout)
+const std::vector<uint8_t> serializeO65(const implementation_defined::O65_File_Layout &layout)
 {
     std::vector<uint8_t> o65Data;
 
@@ -1758,6 +1963,11 @@ std::vector<uint8_t> serializeO65(const implementation_defined::O65_File_Layout 
     const O65_Header_16* header = reinterpret_cast<const O65_Header_16*>(layout.header);
     const uint8_t* headerPtr = reinterpret_cast<const uint8_t*>(layout.header);
     o65Data.insert(o65Data.end(), headerPtr, headerPtr + sizeof(O65_Header_16));
+
+    
+    // Serialize Header Options
+    // First, serialize the options terminator (0x00)
+    o65Data.push_back(o65::HEADER_OPTIONS_TERMINATOR);
 
     // Serialize Text Segment
     o65Data.insert(o65Data.end(), layout.text_data, layout.text_data + header->tlen);
@@ -1768,19 +1978,43 @@ std::vector<uint8_t> serializeO65(const implementation_defined::O65_File_Layout 
     // Serialize Undefined References
     o65Data.insert(o65Data.end(), layout.undef_refs.data, layout.undef_refs.data + layout.undef_refs.size_bytes);
 
+    // Serialize Relocation Tables
+    o65Data.insert(o65Data.end(), layout.text_reloc.data, layout.text_reloc.data + layout.text_reloc.size_bytes);
+    o65Data.insert(o65Data.end(), layout.data_reloc.data, layout.data_reloc.data + layout.data_reloc.size_bytes);
+
     // Serialize Exported Globals
     o65Data.insert(o65Data.end(), layout.exported_globals.data, layout.exported_globals.data + layout.exported_globals.size_bytes);
 
-    o65Data.insert(o65Data.end(), layout.text_reloc.data, layout.text_reloc.data + layout.text_reloc.size_bytes);
-    o65Data.insert(o65Data.end(), layout.data_reloc.data, layout.data_reloc.data + layout.data_reloc.size_bytes);
 
 
     return o65Data;
 }
 
+const std::vector<uint8_t> CodegenVisitor::buildHeaderOptions()
+{
+    std::vector<uint8_t> options;
+    
+    // Option: Assembler/linker identification (type 2)
+    const char* assemblerName = "nixie";
+    size_t nameLen = strlen(assemblerName);
+    uint8_t optionLen = static_cast<uint8_t>(nameLen + 2); // +2 for length byte and type byte
+    options.push_back(optionLen);
+    options.push_back(static_cast<uint8_t>(o65::HeaderOptionType::ASSEMBLER));
+    for (size_t i = 0; i < nameLen; ++i) {
+        options.push_back(static_cast<uint8_t>(assemblerName[i]));
+    }
+    
+    // Add more options here as needed (filename, author, etc.)
+    
+    // Terminate options list
+    options.push_back(o65::HEADER_OPTIONS_TERMINATOR);
+    
+    return options;
+}
+
 std::vector<uint8_t> CodegenVisitor::generateO65()
 {
-    std::vector<uint8_t> o65Data;
+    // std::vector<uint8_t> o65Data;
     implementation_defined::O65_File_Layout layout;
     O65_Header_16 header16{};
 
@@ -1818,7 +2052,765 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
 
     layout.next_section = nullptr; // not implemented yet
 
+    // Build header options
+    auto headerOptions = buildHeaderOptions();
+
+    // Serialize manually to include header options
+    std::vector<uint8_t> o65Data;
+
+    // Serialize fixed header
+    // const uint8_t* headerPtr = reinterpret_cast<const uint8_t*>(&header16);
+    // Use serializeO65 for serialization
+    layout.header = &header16;
+    
+    // Store vectors in temporary storage so they remain valid during serialization
+    std::vector<uint8_t> headerOptionsStorage = headerOptions;
+    
     o65Data = serializeO65(layout);
+    
+    // Insert header options after the fixed header (before text segment)
+    // The serializeO65 function puts a single terminator, we need to replace it with our options
+    // Find where header ends and insert our options
+    size_t headerEnd = sizeof(O65_Header_16);
+    
+    // Remove the single terminator that serializeO65 added and insert our full options
+    o65Data.erase(o65Data.begin() + headerEnd);
+    o65Data.insert(o65Data.begin() + headerEnd, headerOptions.begin(), headerOptions.end());
 
     return o65Data;
+}
+
+std::vector<uint8_t> CodegenVisitor::generateVectorTable()
+{
+    // Generate the 6502 vector table (6 bytes at $FFFA-$FFFF)
+    // Format: NMI (2 bytes), RESET (2 bytes), IRQ/BRK (2 bytes)
+    std::vector<uint8_t> vectors(6, 0x00);
+    
+    // These will need to be relocated by the linker
+    // For now, we return placeholder addresses
+    // The actual addresses will be filled in by the linker based on exported globals
+    
+    // Note: In a real implementation, you'd add relocation entries for these
+    // pointing to the appropriate handler symbols
+    
+    return vectors;
+}
+
+// ============================================================================
+// MULTIPLICATION ROUTINES
+// ============================================================================
+
+void CodegenVisitor::emitMultiply8Shift()
+{
+    // 8-bit multiply using shift-and-add algorithm
+    // Input: A = multiplier, __temporary = multiplicand
+    // Output: A = low byte, X = high byte of 16-bit result
+    // Clobbers: Y, temp locations
+    
+    auto multiplicand = getZeroPageAllocation("__temporary").value().address;
+    auto resultLo = getZeroPageAllocation("__temporary_2p").value().address;
+    auto resultHi = resultLo + 1;
+    
+    // Initialize result to 0
+    emitOp(Opcodes::LDX_IMMEDIATE);
+    emit(0x00);
+    emitOp(Opcodes::STX_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STX_ZEROPAGE);
+    emit(resultHi);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Save multiplier to Y for counting
+    emitOp(Opcodes::TAY);
+    
+    // Loop 8 times (for 8-bit multiply)
+    emitOp(Opcodes::LDX_IMMEDIATE);
+    emit(8);
+    
+    auto loopStart = createLabel("mul_loop");
+    auto skipAdd = createLabel("mul_skip");
+    auto loopEnd = createLabel("mul_end");
+    
+    emitLabel(loopStart);
+    
+    // Check if LSB of multiplier is set
+    emitOp(Opcodes::TYA);
+    emitOp(Opcodes::AND_IMMEDIATE);
+    emit(0x01);
+    emitJump(Opcodes::BEQ, skipAdd);
+    
+    // Add multiplicand to result
+    emitOp(Opcodes::CLC);
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ADC_ZEROPAGE);
+    emit(multiplicand);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(resultHi);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ADC_IMMEDIATE);
+    emit(0x00);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(resultHi);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitLabel(skipAdd);
+    
+    // Shift multiplicand left
+    emitOp(Opcodes::ASL_ZEROPAGE);
+    emit(multiplicand);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Shift multiplier right
+    emitOp(Opcodes::TYA);
+    emitOp(Opcodes::LSR_ACCUMULATOR);
+    emitOp(Opcodes::TAY);
+    
+    // Decrement counter and loop
+    emitOp(Opcodes::DEX);
+    emitJump(Opcodes::BNE, loopStart);
+    
+    emitLabel(loopEnd);
+    
+    // Load result into A (low) and X (high)
+    emitOp(Opcodes::LDX_ZEROPAGE);
+    emit(resultHi);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+}
+
+void CodegenVisitor::emitMultiply8Table()
+{
+    // 8-bit multiply using (a*b) = sq[a+b] - sq[|a-b|]
+    // where sq[n] = floor(n²/4)
+    // This requires a 512-byte lookup table for sq[0..511]
+    
+    // Embed the table if not already done
+    if (!squaresTableEmbedded) {
+        squaresTableOffset = embedSquaresTable();
+        squaresTableEmbedded = true;
+    }
+    
+    auto multiplicand = getZeroPageAllocation("__temporary").value().address;
+    auto temp = getZeroPageAllocation("__temporary_dos").value().address;
+    auto resultLo = getZeroPageAllocation("__temporary_2p").value().address;
+    auto resultHi = resultLo + 1;
+    auto sumIdx = temp;
+    auto diffIdx = temp + 1;
+    
+    // Save A (multiplier) to temp
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(temp);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Compute sum = A + multiplicand (for table index)
+    emitOp(Opcodes::CLC);
+    emitOp(Opcodes::ADC_ZEROPAGE);
+    emit(multiplicand);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(sumIdx);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Compute diff = |A - multiplicand|
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(temp);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::SEC);
+    emitOp(Opcodes::SBC_ZEROPAGE);
+    emit(multiplicand);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Branch if result is positive (A >= multiplicand)
+    auto noNegate = createLabel("mul_no_neg");
+    emitJump(Opcodes::BPL, noNegate);
+    
+    // Negate if negative: result = 0 - result
+    emitOp(Opcodes::EOR_IMMEDIATE);
+    emit(0xFF);
+    emitOp(Opcodes::CLC);
+    emitOp(Opcodes::ADC_IMMEDIATE);
+    emit(0x01);
+    
+    emitLabel(noNegate);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(diffIdx);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Load sq[sum] low byte - table address + sumIdx
+    emitOp(Opcodes::LDY_ZEROPAGE);
+    emit(sumIdx);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::LDA_ABSOLUTE_Y);
+    emit(static_cast<uint8_t>(squaresTableOffset & 0xFF));
+    emit(static_cast<uint8_t>((squaresTableOffset >> 8) & 0xFF));
+    addTextReloc(RelocationType::WORD, SegmentID::DATA);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Load sq[sum] high byte (table + 256 + sumIdx)
+    emitOp(Opcodes::LDA_ABSOLUTE_Y);
+    emit(static_cast<uint8_t>((squaresTableOffset + 256) & 0xFF));
+    emit(static_cast<uint8_t>(((squaresTableOffset + 256) >> 8) & 0xFF));
+    addTextReloc(RelocationType::WORD, SegmentID::DATA);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(resultHi);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Subtract sq[diff] from result
+    emitOp(Opcodes::LDY_ZEROPAGE);
+    emit(diffIdx);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // resultLo -= sqLo[diff]
+    emitOp(Opcodes::SEC);
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::SBC_ABSOLUTE_Y);
+    emit(static_cast<uint8_t>(squaresTableOffset & 0xFF));
+    emit(static_cast<uint8_t>((squaresTableOffset >> 8) & 0xFF));
+    addTextReloc(RelocationType::WORD, SegmentID::DATA);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // resultHi -= sqHi[diff] - borrow
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(resultHi);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::SBC_ABSOLUTE_Y);
+    emit(static_cast<uint8_t>((squaresTableOffset + 256) & 0xFF));
+    emit(static_cast<uint8_t>(((squaresTableOffset + 256) >> 8) & 0xFF));
+    addTextReloc(RelocationType::WORD, SegmentID::DATA);
+    emitOp(Opcodes::TAX);
+    
+    // Load result into A (low) and X (high)
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(resultLo);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+}
+
+size_t CodegenVisitor::embedSquaresTable()
+{
+    // Generate sq[n] = floor(n²/4) for n = 0..511
+    // Split into low and high byte tables for easier indexing
+    // Table layout: sqLo[0..255], sqLo[256..511], sqHi[0..255], sqHi[256..511]
+    
+    size_t tableStart = dataSegment.size();
+    
+    // Generate sqLo table (low bytes of n²/4 for n=0..511)
+    for (int n = 0; n < 512; ++n) {
+        uint16_t sq = static_cast<uint16_t>((n * n) / 4);
+        emitData(static_cast<uint8_t>(sq & 0xFF));
+    }
+    
+    // Generate sqHi table (high bytes of n²/4 for n=0..511)
+    for (int n = 0; n < 512; ++n) {
+        uint16_t sq = static_cast<uint16_t>((n * n) / 4);
+        emitData(static_cast<uint8_t>((sq >> 8) & 0xFF));
+    }
+    
+    return tableStart;
+}
+
+void CodegenVisitor::emitMultiply16Shift()
+{
+    // 16-bit multiply using shift-and-add algorithm
+    // Input: __temporary (2 bytes) = multiplier, __temporary_2p (2 bytes) = multiplicand
+    // Output: __temporary_2p (4 bytes) = 32-bit result (low to high)
+    
+    auto multiplier = getZeroPageAllocation("__temporary").value().address;
+    auto multiplicand = getZeroPageAllocation("__temporary_2p").value().address;
+    auto result = getZeroPageAllocation("__temporary_dos").value().address; // Need 4 bytes for result
+    
+    // We'll use __temporary_dos as 4-byte result, then copy back
+    // Initialize result to 0
+    emitOp(Opcodes::LDA_IMMEDIATE);
+    emit(0x00);
+    for (int i = 0; i < 4; ++i) {
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(result + i);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    }
+    
+    // Loop 16 times
+    emitOp(Opcodes::LDX_IMMEDIATE);
+    emit(16);
+    
+    auto loopStart = createLabel("mul16_loop");
+    auto skipAdd = createLabel("mul16_skip");
+    
+    emitLabel(loopStart);
+    
+    // Check if LSB of multiplier is set
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(multiplier);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::AND_IMMEDIATE);
+    emit(0x01);
+    emitJump(Opcodes::BEQ, skipAdd);
+    
+    // Add multiplicand to result (32-bit add)
+    emitOp(Opcodes::CLC);
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(result);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ADC_ZEROPAGE);
+    emit(multiplicand);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(result);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(result + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ADC_ZEROPAGE);
+    emit(multiplicand + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(result + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(result + 2);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ADC_IMMEDIATE);
+    emit(0x00);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(result + 2);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(result + 3);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ADC_IMMEDIATE);
+    emit(0x00);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(result + 3);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitLabel(skipAdd);
+    
+    // Shift multiplicand left by 1 (32-bit shift)
+    emitOp(Opcodes::ASL_ZEROPAGE);
+    emit(multiplicand);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ROL_ZEROPAGE);
+    emit(multiplicand + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Shift multiplier right by 1 (16-bit shift)
+    emitOp(Opcodes::LSR_ZEROPAGE);
+    emit(multiplier + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ROR_ZEROPAGE);
+    emit(multiplier);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Decrement counter and loop
+    emitOp(Opcodes::DEX);
+    emitJump(Opcodes::BNE, loopStart);
+    
+    // Copy result back to __temporary_2p (just low 16 bits for now)
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(result);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(multiplicand);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(result + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(multiplicand + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Load result into A (low) and X (high)
+    emitOp(Opcodes::LDX_ZEROPAGE);
+    emit(result + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(result);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+}
+
+void CodegenVisitor::emitDivide16()
+{
+    // 16-bit divide using binary long division
+    // Input: __temporary (2 bytes) = dividend, __temporary_2p (2 bytes) = divisor
+    // Output: __temporary = quotient, __temporary_2p = remainder
+    // Algorithm: For each bit, shift remainder left, bring in next dividend bit,
+    //            compare to divisor, subtract if >=, shift result bit into quotient
+    
+    auto dividend = getZeroPageAllocation("__temporary").value().address;
+    auto divisor = getZeroPageAllocation("__temporary_2p").value().address;
+    auto quotient = getZeroPageAllocation("__temporary_dos").value().address;
+    auto remainder = quotient + 2;
+    
+    // Initialize quotient and remainder to 0
+    emitOp(Opcodes::LDA_IMMEDIATE);
+    emit(0x00);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(quotient);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(quotient + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(remainder + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Loop 16 times (for 16-bit division)
+    emitOp(Opcodes::LDX_IMMEDIATE);
+    emit(16);
+    
+    auto loopStart = createLabel("div16_loop");
+    auto doSubtract = createLabel("div16_sub");
+    auto afterCheck = createLabel("div16_after");
+    
+    emitLabel(loopStart);
+    
+    // Shift quotient left by 1 (to make room for new bit)
+    emitOp(Opcodes::ASL_ZEROPAGE);
+    emit(quotient);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ROL_ZEROPAGE);
+    emit(quotient + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Shift remainder left by 1, bringing in MSB of dividend
+    emitOp(Opcodes::ASL_ZEROPAGE);
+    emit(dividend);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ROL_ZEROPAGE);
+    emit(dividend + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ROL_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::ROL_ZEROPAGE);
+    emit(remainder + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Compare remainder >= divisor (16-bit comparison)
+    // Compare high bytes first
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(remainder + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::CMP_ZEROPAGE);
+    emit(divisor + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitJump(Opcodes::BCC, afterCheck); // remainder < divisor (high byte less)
+    emitJump(Opcodes::BNE, doSubtract); // remainder > divisor (high byte greater)
+    
+    // High bytes equal, check low bytes
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::CMP_ZEROPAGE);
+    emit(divisor);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitJump(Opcodes::BCC, afterCheck); // remainder < divisor
+    
+    emitLabel(doSubtract);
+    
+    // remainder >= divisor: subtract and set quotient bit
+    emitOp(Opcodes::SEC);
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::SBC_ZEROPAGE);
+    emit(divisor);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(remainder + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::SBC_ZEROPAGE);
+    emit(divisor + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(remainder + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Set LSB of quotient (we already shifted, so just INC)
+    emitOp(Opcodes::INC_ZEROPAGE);
+    emit(quotient);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitLabel(afterCheck);
+    
+    // Decrement counter and loop
+    emitOp(Opcodes::DEX);
+    emitJump(Opcodes::BNE, loopStart);
+    
+    // Copy quotient to __temporary
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(quotient);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(dividend);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(quotient + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(dividend + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Copy remainder to __temporary_2p
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(divisor);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(remainder + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(divisor + 1);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+}
+
+void CodegenVisitor::emitDivide8()
+{
+    // 8-bit divide using repeated subtraction
+    // Input: A = dividend, __temporary = divisor
+    // Output: A = quotient, X = remainder
+    
+    auto divisor = getZeroPageAllocation("__temporary").value().address;
+    auto quotient = getZeroPageAllocation("__temporary_2p").value().address;
+    auto remainder = quotient + 1;
+    
+    // Initialize quotient to 0
+    emitOp(Opcodes::LDX_IMMEDIATE);
+    emit(0x00);
+    emitOp(Opcodes::STX_ZEROPAGE);
+    emit(quotient);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // Store dividend as initial remainder
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    auto loopStart = createLabel("div_loop");
+    auto loopEnd = createLabel("div_end");
+    
+    emitLabel(loopStart);
+    
+    // Check if remainder >= divisor
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::CMP_ZEROPAGE);
+    emit(divisor);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitJump(Opcodes::BCC, loopEnd); // remainder < divisor, done
+    
+    // remainder -= divisor
+    emitOp(Opcodes::SEC);
+    emitOp(Opcodes::SBC_ZEROPAGE);
+    emit(divisor);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    // quotient++
+    emitOp(Opcodes::INC_ZEROPAGE);
+    emit(quotient);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    emitJump(Opcodes::JMP_ABSOLUTE, loopStart);
+    
+    emitLabel(loopEnd);
+    
+    // Load results: A = quotient, X = remainder
+    emitOp(Opcodes::LDX_ZEROPAGE);
+    emit(remainder);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::LDA_ZEROPAGE);
+    emit(quotient);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+}
+
+void CodegenVisitor::loadStackVariable(int32_t offset, size_t size)
+{
+    auto fp = getZeroPageAllocation("__frame_pointer").value().address;
+    auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+    
+    if (offset >= 0) {
+        // Positive offset (parameters)
+        emitOp(Opcodes::LDY_IMMEDIATE);
+        emit(static_cast<uint8_t>(offset));
+        emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+        emit(fp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        if (size > 1) {
+            emitOp(Opcodes::INY);
+            emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+            emit(fp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            emitOp(Opcodes::TAX);
+            emitOp(Opcodes::DEY);
+            emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+            emit(fp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        }
+    } else {
+        // Negative offset (locals) - compute address
+        emitOp(Opcodes::SEC);
+        emitOp(Opcodes::LDA_ZEROPAGE);
+        emit(fp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::SBC_IMMEDIATE);
+        emit(static_cast<uint8_t>((-offset) & 0xFF));
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        emitOp(Opcodes::LDA_ZEROPAGE);
+        emit(fp + 1);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::SBC_IMMEDIATE);
+        emit(0x00);
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp + 1);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        emitOp(Opcodes::LDY_IMMEDIATE);
+        emit(0x00);
+        emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+        emit(temp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        if (size > 1) {
+            emitOp(Opcodes::INY);
+            emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            emitOp(Opcodes::TAX);
+            emitOp(Opcodes::DEY);
+            emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        }
+    }
+}
+
+void CodegenVisitor::storeStackVariable(int32_t offset, size_t size)
+{
+    auto fp = getZeroPageAllocation("__frame_pointer").value().address;
+    auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+    auto tempA = getZeroPageAllocation("__temporary").value().address;
+    
+    // Save A to temp first
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(tempA);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    
+    if (offset >= 0) {
+        emitOp(Opcodes::LDY_IMMEDIATE);
+        emit(static_cast<uint8_t>(offset));
+        emitOp(Opcodes::LDA_ZEROPAGE);
+        emit(tempA);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+        emit(fp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        if (size > 1) {
+            emitOp(Opcodes::INY);
+            emitOp(Opcodes::TXA);
+            emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+            emit(fp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        }
+    } else {
+        // Compute address for negative offset
+        emitOp(Opcodes::SEC);
+        emitOp(Opcodes::LDA_ZEROPAGE);
+        emit(fp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::SBC_IMMEDIATE);
+        emit(static_cast<uint8_t>((-offset) & 0xFF));
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        emitOp(Opcodes::LDA_ZEROPAGE);
+        emit(fp + 1);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::SBC_IMMEDIATE);
+        emit(0x00);
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp + 1);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        emitOp(Opcodes::LDY_IMMEDIATE);
+        emit(0x00);
+        emitOp(Opcodes::LDA_ZEROPAGE);
+        emit(tempA);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+        emit(temp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        
+        if (size > 1) {
+            emitOp(Opcodes::INY);
+            emitOp(Opcodes::TXA);
+            emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+            emit(temp);
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        }
+    }
+}
+
+void CodegenVisitor::visit(ReturnNode &node)
+{
+    if (node.expression) {
+        // Evaluate return expression
+        node.expression->accept(*this);
+        auto result = evalStack.top();
+        evalStack.pop();
+        
+        // Load result into A (and X for 16-bit)
+        loadIntoRegister(result);
+    }
+    
+    // Emit function epilogue and return
+    if (currentFunctionIsInterrupt) {
+        // Restore registers for interrupt handler
+        emitOp(Opcodes::PLY);
+        emitOp(Opcodes::PLX);
+        emitOp(Opcodes::PLA);
+        emitOp(Opcodes::RTI);
+    } else {
+        emitEpilogue(0); // frameSize not used in current implementation
+        emitOp(Opcodes::RTS);
+    }
 }

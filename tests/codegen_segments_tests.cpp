@@ -59,7 +59,7 @@ TEST_F(CodegenSegmentTest, TextSegment_FunctionEndsWithRTS) {
 TEST_F(CodegenSegmentTest, TextSegment_InterruptEndsWithRTI) {
     std::map<std::string_view, AstType> params;
     std::vector<std::unique_ptr<Node>> body;
-    auto func = makeFunction("rti_test", params, std::move(body), true);
+    auto func = makeFunction("rti_test", params, std::move(body), InterruptType::IRQ);
     
     visitor.visit(*func);
     

@@ -156,13 +156,13 @@ protected:
     std::unique_ptr<FunctionNode> makeFunction(std::string_view name, 
                                                std::map<std::string_view, AstType> params, 
                                                std::vector<std::unique_ptr<Node>> body, 
-                                               bool interrupt = false) {
+                                               InterruptType interrupt = InterruptType::NONE) {
         return std::make_unique<FunctionNode>(name, std::move(params), std::move(body), interrupt);
     }
 
     std::unique_ptr<FunctionNode> makeFunctionDecl(std::string_view name, 
                                                    std::map<std::string_view, AstType> params, 
-                                                   bool interrupt = false) {
+                                                   InterruptType interrupt = InterruptType::NONE) {
         return std::make_unique<FunctionNode>(name, std::move(params), interrupt);
     }
 

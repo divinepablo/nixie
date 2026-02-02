@@ -22,6 +22,14 @@ enum class UnaryOperator
     UNKNOWN,
 }; // this language's syntax is odd.
 
+enum class InterruptType
+{
+    NONE = 0,    // Not an interrupt handler
+    NMI,         // Non-Maskable Interrupt ($FFFA)
+    RESET,       // Reset vector ($FFFC)
+    IRQ,         // IRQ/BRK vector ($FFFE)
+};
+
 enum class TypeKind // thanks big gemi
 {
     UNSIGNED_8,
@@ -57,6 +65,7 @@ struct IfNode;
 struct UnaryNode;
 struct WhileNode;
 struct MemberReferenceNode;
+struct ReturnNode;
 
 // 2. Create the unified Type struct
 struct AstType {
@@ -130,6 +139,7 @@ public:
     virtual void visit(IfNode &node) = 0;
     virtual void visit(WhileNode &node) = 0;
     virtual void visit(MemberReferenceNode &node) = 0;
+    virtual void visit(ReturnNode &node) = 0;
 };
 
 constexpr Comparison tokenToComparison(const Token token) {
@@ -261,10 +271,12 @@ struct FunctionNode : Node
     std::string_view name;
     std::map<std::string_view, AstType> parameters;
     std::vector<std::unique_ptr<Node>> body;
-    bool interrupt, defined;
-    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, std::vector<std::unique_ptr<Node>> nodes, bool interrupt = false) : name(id), parameters(std::move(parameters)), body(std::move(nodes)), interrupt(interrupt), defined(true) {}
-    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, bool interrupt = false) : name(id), parameters(std::move(parameters)), interrupt(interrupt), defined(false) {}
+    InterruptType interruptType;
+    bool defined;
+    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, std::vector<std::unique_ptr<Node>> nodes, InterruptType interrupt = InterruptType::NONE) : name(id), parameters(std::move(parameters)), body(std::move(nodes)), interruptType(interrupt), defined(true) {}
+    explicit FunctionNode(std::string_view id, std::map<std::string_view, AstType> parameters, InterruptType interrupt = InterruptType::NONE) : name(id), parameters(std::move(parameters)), interruptType(interrupt), defined(false) {}
     void accept(Visitor &v) override { v.visit(*this); }
+    bool isInterrupt() const { return interruptType != InterruptType::NONE; }
 };
 
 struct IfNode : Node
@@ -307,5 +319,12 @@ struct VariableNode : Node
     bool zeropaged;
     std::string_view structureName;
     explicit VariableNode(std::string_view identifier, AstType type, std::unique_ptr<Node> expr, bool constant = false, bool zeropage = false, std::string_view structName = "") : name(identifier), type(type), value(std::move(expr)), constant(constant), zeropaged(zeropage), structureName(structName) {}
+    void accept(Visitor &v) override { v.visit(*this); }
+};
+
+struct ReturnNode : Node
+{
+    std::unique_ptr<Node> expression; // nullptr for void return
+    explicit ReturnNode(std::unique_ptr<Node> expr = nullptr) : expression(std::move(expr)) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };

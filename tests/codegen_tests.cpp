@@ -786,7 +786,7 @@ TEST_F(CodegenTestBase, FunctionNode_InterruptFunction) {
     std::map<std::string_view, AstType> params;
     std::vector<std::unique_ptr<Node>> body;
     
-    auto funcNode = makeFunction("irq_handler", params, std::move(body), true);
+    auto funcNode = makeFunction("irq_handler", params, std::move(body), InterruptType::IRQ);
     visitor.visit(*funcNode);
     
     const auto& text = getTextSegment();

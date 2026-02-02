@@ -231,12 +231,25 @@ std::unique_ptr<Node> Parser::parseStatement()
     }
     case Type::IF: return parseIf();
     case Type::WHILE: return parseWhile();
+    case Type::RETURN: return parseReturn();
     
     default:
         auto expr = parseAssignment();
         consume(Type::SEMICOLON);
         return std::move(expr);
     }
+}
+
+std::unique_ptr<ReturnNode> Parser::parseReturn()
+{
+    consume(Type::RETURN);
+    if (currentToken.type == Type::SEMICOLON) {
+        consume(Type::SEMICOLON);
+        return std::make_unique<ReturnNode>(nullptr);
+    }
+    auto expr = parseExpression();
+    consume(Type::SEMICOLON);
+    return std::make_unique<ReturnNode>(std::move(expr));
 }
 
 std::vector<std::unique_ptr<Node>> Parser::parseBlock()
@@ -251,9 +264,9 @@ std::vector<std::unique_ptr<Node>> Parser::parseBlock()
     return nodes;
 }
 
-std::unique_ptr<FunctionNode> Parser::parseFunction(bool interrupt)
+std::unique_ptr<FunctionNode> Parser::parseFunction(InterruptType interruptType)
 {
-    if (interrupt) consume(Type::INTERRUPT);
+    if (interruptType != InterruptType::NONE) consume(Type::INTERRUPT);
     consume(Type::FUNCTION);
 
     const auto name = currentToken.value;
@@ -278,10 +291,10 @@ std::unique_ptr<FunctionNode> Parser::parseFunction(bool interrupt)
     if (currentToken.type != Type::SEMICOLON) {
         auto block = parseBlock();
         
-    return std::make_unique<FunctionNode>(FunctionNode(name, std::move(parameters), std::move(block), interrupt));
+    return std::make_unique<FunctionNode>(FunctionNode(name, std::move(parameters), std::move(block), interruptType));
     }
     else {
-        return std::make_unique<FunctionNode>(FunctionNode(name, std::move(parameters), std::vector<std::unique_ptr<Node>>(), interrupt));
+        return std::make_unique<FunctionNode>(FunctionNode(name, std::move(parameters), std::vector<std::unique_ptr<Node>>(), interruptType));
     }
 
 }
@@ -351,9 +364,56 @@ ProgramNode *Parser::parseProgram()
         case Type::FUNCTION:
             root->statements.push_back(parseFunction());
             break;
-        case Type::INTERRUPT:
-            root->statements.push_back(parseFunction(true));
+        case Type::INTERRUPT: {
+            consume(Type::INTERRUPT);
+            consume(Type::OPEN_PAREN);
+            InterruptType intType = InterruptType::IRQ; // default
+            if (currentToken.type == Type::NMI) {
+                intType = InterruptType::NMI;
+                consume(Type::NMI);
+            } else if (currentToken.type == Type::IRQ) {
+                intType = InterruptType::IRQ;
+                consume(Type::IRQ);
+            } else if (currentToken.type == Type::RESET) {
+                intType = InterruptType::RESET;
+                consume(Type::RESET);
+            } else {
+                throw std::runtime_error("Expected interrupt type: nmi, irq, or reset");
+            }
+            consume(Type::CLOSE_PAREN);
+            consume(Type::FUNCTION);
+            const auto name = currentToken.value;
+            // Accept IDENTIFIER, IRQ, NMI, or RESET as valid function names
+            if (currentToken.type == Type::IDENTIFIER) {
+                consume(Type::IDENTIFIER);
+            } else if (currentToken.type == Type::IRQ) {
+                consume(Type::IRQ);
+            } else if (currentToken.type == Type::NMI) {
+                consume(Type::NMI);
+            } else if (currentToken.type == Type::RESET) {
+                consume(Type::RESET);
+            } else {
+                throw std::runtime_error("Expected function name");
+            }
+            consume(Type::OPEN_PAREN);
+            std::map<std::string_view, AstType> parameters;
+            while (currentToken.type != Type::CLOSE_PAREN) {
+                const auto param = currentToken.value;
+                consume(Type::IDENTIFIER);
+                consume(Type::COLON);
+                auto type = parseType(currentToken);
+                if (currentToken.type == Type::COMMA) consume(Type::COMMA);
+                parameters.emplace(std::make_pair(param, type));
+            }
+            consume(Type::CLOSE_PAREN);
+            if (currentToken.type != Type::SEMICOLON) {
+                auto block = parseBlock();
+                root->statements.push_back(std::make_unique<FunctionNode>(name, std::move(parameters), std::move(block), intType));
+            } else {
+                root->statements.push_back(std::make_unique<FunctionNode>(name, std::move(parameters), intType));
+            }
             break;
+        }
         case Type::STRUCT:
             root->statements.push_back(parseStructure());
             break;
@@ -414,7 +474,7 @@ std::unique_ptr<Node> Parser::parseAssignment()
 
     if (currentToken.type == Type::ASSIGN)
     {
-        consume(Type::EQUALS);
+        consume(Type::ASSIGN); // seriously...
         auto right = parseAssignment();
         return std::make_unique<AssignmentNode>(AssignmentNode(std::move(left), std::move(right)));
     }
@@ -492,6 +552,12 @@ std::unique_ptr<Node> Parser::parsePrimary()
     case Type::NUMBER:
     {
         return std::make_unique<NumberNode>(NumberNode(parseNumber()));
+    }
+    case Type::CHARACTER:
+    {
+        char charValue = currentToken.value[0];
+        consume(Type::CHARACTER);
+        return std::make_unique<NumberNode>(NumberNode(static_cast<int64_t>(charValue)));
     }
     case Type::STRING:
     {

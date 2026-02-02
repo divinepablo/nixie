@@ -48,8 +48,11 @@ public:
             return std::nullopt;
         }
         
+        // Use uint16_t to avoid overflow when start reaches 255
+        uint16_t endLimit = static_cast<uint16_t>(USER_END) - size + 1;
+        
         // Try to find contiguous free space
-        for (uint8_t start = USER_START; start <= USER_END - size + 1; ++start) {
+        for (uint16_t start = USER_START; start <= endLimit; ++start) {
             bool canAllocate = true;
             
             // Check if all needed bytes are free
@@ -67,9 +70,9 @@ public:
                 }
                 
                 // Update next free hint
-                nextFreeAddress = start + size;
+                nextFreeAddress = static_cast<uint8_t>(start + size);
                 
-                return start;
+                return static_cast<uint8_t>(start);
             }
         }
         
@@ -166,6 +169,7 @@ struct SymbolInfo {
     StorageClass storage;
     int32_t offset; // Stack offset (negative) or Segment offset (positive)
     bool isConstant;
+    bool isExternal = false; // Imported symbol
     size_t size;    // Size in bytes
 };
 
@@ -228,6 +232,11 @@ private:
     std::vector<std::string> undefinedList; // External imports
     std::vector<std::pair<std::string, size_t>> exportedGlobals; // Exports
 
+    // --- Interrupt Vector Table ---
+    std::optional<std::string> nmiHandler;
+    std::optional<std::string> resetHandler;
+    std::optional<std::string> irqHandler;
+
     // --- Compilation State ---
     std::vector<Scope> scopes;      // Stack of scopes
     std::map<std::string, StructInfo> structDefinitions; // Struct registry
@@ -239,6 +248,7 @@ private:
     // Current function context
     std::optional<SymbolInfo> currentFunction;
     int currentStackDepth = 0; // Tracks generic stack usage (pushes/pops)
+    bool currentFunctionIsInterrupt = false; // For proper epilogue generation
 
     ZeroPageAllocator zeroPageAllocator;
     
@@ -327,6 +337,8 @@ private:
     const std::vector<uint8_t> writeRelocationTable(const std::vector<o65::O65_Relocation_Entry> relocations, const uint32_t base);
     const std::vector<uint8_t> writeExportedGlobals();
 
+    const std::vector<uint8_t> buildHeaderOptions();
+
     // Emit function entry sequence (stack frame setup)
     void emitPrologue(size_t frameSize);
     // Purpose: Pushes old FP, moves SP to FP, reserves stack space.
@@ -361,6 +373,47 @@ private:
     uint32_t calculateMemberOffset(const AstType& structType, const std::string& memberName);
     // Purpose: Returns the byte offset of a member within a struct.
     // Called when: visit(MemberReferenceNode).
+    
+    // --- Multiplication and Division ---
+    // Emit 8-bit multiply using shift-and-add algorithm
+    // Input: A = multiplier, temp zeropage = multiplicand
+    // Output: A = low byte, X = high byte
+    void emitMultiply8Shift();
+    
+    // Emit 8-bit multiply using square lookup table
+    // Uses formula: a*b = (sq[a+b] - sq[|a-b|]) where sq[n] = n²/4
+    // Input: A = multiplier, temp zeropage = multiplicand
+    // Output: A = low byte, X = high byte
+    void emitMultiply8Table();
+    
+    // Emit 16-bit multiply using shift-and-add algorithm
+    // Input: __temporary (2 bytes) = multiplier, __temporary_2p (2 bytes) = multiplicand
+    // Output: Result stored in __temporary_2p (4 bytes for full 32-bit result)
+    void emitMultiply16Shift();
+    
+    // Emit 8-bit divide using repeated subtraction
+    // Input: A = dividend, temp zeropage = divisor
+    // Output: A = quotient, X = remainder
+    void emitDivide8();
+    
+    // Emit 16-bit divide using repeated subtraction
+    // Input: __temporary (2 bytes) = dividend, __temporary_2p (2 bytes) = divisor
+    // Output: __temporary = quotient, __temporary_2p = remainder
+    void emitDivide16();
+    
+    // Generate and embed the squares lookup table in data segment
+    // Returns the offset in data segment where table starts
+    size_t embedSquaresTable();
+    
+    // Track if squares table has been embedded
+    bool squaresTableEmbedded = false;
+    size_t squaresTableOffset = 0;
+
+    // Load stack variable into accumulator
+    void loadStackVariable(int32_t offset, size_t size);
+    
+    // Store accumulator to stack variable
+    void storeStackVariable(int32_t offset, size_t size);
 
 public:
     CodegenVisitor() {
@@ -398,8 +451,12 @@ public:
     void visit(IfNode &node) override;
     void visit(WhileNode &node) override;
     void visit(MemberReferenceNode &node) override;
+    void visit(ReturnNode &node) override;
 
     // --- Finalization ---
     // Assembles the segments into a final O65 binary blob
     std::vector<uint8_t> generateO65();
+    
+    // Generate the 6502 vector table segment
+    std::vector<uint8_t> generateVectorTable();
 };

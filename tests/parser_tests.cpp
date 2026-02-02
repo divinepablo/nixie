@@ -32,11 +32,11 @@ void expect_variable_equal_number(const Node* node, const VariableExpectation& e
     EXPECT_EQ(number->value, expectedNumber.value);
 }
 
-void expect_function(const Node* node, const std::string& expectedName, bool expectedInterrupt, size_t expectedParamCount) {
+void expect_function(const Node* node, const std::string& expectedName, InterruptType expectedInterrupt, size_t expectedParamCount) {
     const auto* fn = dynamic_cast<const FunctionNode*>(node);
     ASSERT_NE(fn, nullptr) << "Expected FunctionNode";
     EXPECT_EQ(fn->name, expectedName);
-    EXPECT_EQ(fn->interrupt, expectedInterrupt);
+    EXPECT_EQ(fn->interruptType, expectedInterrupt);
     EXPECT_EQ(fn->parameters.size(), expectedParamCount);
 }
 
@@ -87,19 +87,19 @@ TEST(ParserTests, ZeropageVariableDeclaration) {
 
 TEST(ParserTests, FunctionDeclaration) {
     expect_program("fn main() {}", {
-        [](const Node* n) { expect_function(n, "main", false, 0); }
+        [](const Node* n) { expect_function(n, "main", InterruptType::NONE, 0); }
     });
 }
 
 TEST(ParserTests, FunctionWithParams) {
     expect_program("fn add(x: u8, y: u8) {}", {
-        [](const Node* n) { expect_function(n, "add", false, 2); }
+        [](const Node* n) { expect_function(n, "add", InterruptType::NONE, 2); }
     });
 }
 
 TEST(ParserTests, InterruptFunction) {
-    expect_program("__interrupt fn irq() {}", {
-        [](const Node* n) { expect_function(n, "irq", true, 0); }
+    expect_program("__interrupt(irq) fn irq() {}", {
+        [](const Node* n) { expect_function(n, "irq", InterruptType::IRQ, 0); }
     });
 }
 

@@ -9,7 +9,9 @@ class ProgramNode : public Node {
     std::vector<std::unique_ptr<Node>> statements;
     std::vector<std::string> includes;
     void accept(Visitor& v) override {
-        v.visit(*this);
+        for (auto& stmt : statements) {
+            stmt->accept(v);
+        }
     }
 };
 
@@ -28,7 +30,7 @@ class Parser
                 currentToken = tokens[position];
         }
         else
-            throw std::runtime_error("Unexpected Token at position: " + std::to_string(position) + ", " + currentToken.to_string());
+            throw std::runtime_error("Unexpected Token at position: " + std::to_string(position) + ", " + currentToken.to_string() + ", expected " + Token{type, ""}.to_string());
     }
 
     inline Token peek(int offset = 1) {
@@ -62,7 +64,8 @@ public:
     
     std::vector<std::unique_ptr<Node>> parseBlock();
 
-    std::unique_ptr<FunctionNode> parseFunction(bool interrupt = false);
+    std::unique_ptr<FunctionNode> parseFunction(InterruptType interruptType = InterruptType::NONE);
+    std::unique_ptr<ReturnNode> parseReturn();
     std::unique_ptr<StructureNode> parseStructure();
     std::unique_ptr<StructureInitNode> parseStructureInit();
     std::unique_ptr<IfNode> parseIf();

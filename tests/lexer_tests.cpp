@@ -103,7 +103,7 @@ TEST(LexerTests, ParsesComparisonOperators) {
         {Type::IDENTIFIER, "b"},
         {Type::CLOSE_PAREN, ")"},
         {Type::OPEN_BRACE, "{"},
-        {Type::IDENTIFIER, "return"},
+        {Type::RETURN, "return"},
         {Type::IDENTIFIER, "a"},
         {Type::GREATER_THAN_EQUAL, ">="},
         {Type::IDENTIFIER, "b"},
