@@ -14,6 +14,7 @@
 #include <variant>
 #include <optional>
 #include <stdexcept>
+#include <algorithm>
 
 using namespace o65;
 

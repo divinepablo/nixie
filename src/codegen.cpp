@@ -1,5 +1,6 @@
 #include "codegen.hpp"
 #include <stdexcept>
+#include <string.h>
 void CodegenVisitor::emit(uint8_t byte)
 {
     textSegment.push_back(byte);
