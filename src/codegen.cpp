@@ -1,6 +1,6 @@
 #include "codegen.hpp"
 #include <stdexcept>
-#include <string.h>
+#include <cstring>
 void CodegenVisitor::emit(uint8_t byte)
 {
     textSegment.push_back(byte);
@@ -2021,8 +2021,8 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
 
     layout.mode = getMode();
 
-    memcpy_s(header16.marker, 2, o65::NON_C64_MARKER, 2);
-    memcpy_s(header16.magic, 3, o65::MAGIC_NUMBER, 3);
+    std::memcpy(header16.marker, o65::NON_C64_MARKER, 2);
+    std::memcpy(header16.magic, o65::MAGIC_NUMBER, 3);
 
     header16.version = 0x00;
     header16.mode = layout.mode.encode();
