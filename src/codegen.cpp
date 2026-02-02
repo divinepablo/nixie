@@ -1,6 +1,7 @@
 #include "codegen.hpp"
 #include <stdexcept>
 #include <cstring>
+// #include <iostream>
 void CodegenVisitor::emit(uint8_t byte)
 {
     textSegment.push_back(byte);
@@ -687,8 +688,11 @@ const std::vector<uint8_t> CodegenVisitor::writeRelocationTable(const std::vecto
 
         reloc_bytes.push_back(reloc.typebyte);
 
-        if (reloc.symbol_index) {
-            reloc_bytes.push_back(reloc.symbol_index);
+        // Symbol index is required for UNDEFINED segment references (segment ID 0)
+        // The segment ID is in the lower 5 bits of the typebyte
+        if ((get_segment_id(reloc.typebyte)) == o65::SegmentID::UNDEFINED) {
+            reloc_bytes.push_back(reloc.symbol_index & 0xFF);
+            reloc_bytes.push_back((reloc.symbol_index >> 8) & 0xFF);
         }
 
         if (reloc.low_byte) {
@@ -696,7 +700,7 @@ const std::vector<uint8_t> CodegenVisitor::writeRelocationTable(const std::vecto
         }
         if (reloc.seg_offset) {
             reloc_bytes.push_back(reloc.seg_offset & 0xFF);
-            reloc_bytes.push_back((reloc.seg_offset >> 8) * 0xFF); // little endian i think
+            reloc_bytes.push_back((reloc.seg_offset >> 8) & 0xFF); // little endian i think
         }
         last = reloc.absolute_offset;
     }
@@ -710,30 +714,64 @@ const std::vector<uint8_t> CodegenVisitor::writeRelocationTable(const std::vecto
 const std::vector<uint8_t> CodegenVisitor::writeExportedGlobals()
 {
     std::vector<uint8_t> global_bytes;
-    auto globals = scopes.front().symbols;
     
-    size_t total_size = globals.size();
+    // Merge symbols from global scope into exportedGlobals
+    auto& globals = scopes.front().symbols;
+    for (const auto& [name, sym] : globals) {
+        // Determine if this is a function or variable
+        // Functions are marked as isConstant and have storage Global with offset in TEXT
+        // Variables have storage Global/ZeroPage with offset in DATA/ZERO
+        
+        // Check if already in exportedGlobals to avoid duplicates
+        bool alreadyExported = false;
+        for (const auto& [expName, expOffset] : exportedGlobals) {
+            if (expName == name) {
+                alreadyExported = true;
+                break;
+            }
+        }
+        
+        if (!alreadyExported && !sym.isExternal) {
+            exportedGlobals.push_back({name, sym.offset});
+        }
+    }
+    
+    size_t total_size = exportedGlobals.size();
 
     global_bytes.push_back(static_cast<uint8_t>(total_size & 0xFF));
     global_bytes.push_back(static_cast<uint8_t>((total_size >> 8) & 0xFF)); // assuming little endian
     
-    for (auto x : globals) {
-        for (char c : x.first) {
+    for (const auto& [name, offset] : exportedGlobals) {
+        // Write null-terminated name
+        for (char c : name) {
             global_bytes.push_back(static_cast<uint8_t>(c));
         }
         global_bytes.push_back(0x00u);
 
-        if (x.second.isConstant) { // very ghetto function check TODO: implement better check
-            global_bytes.push_back(static_cast<uint8_t>(SegmentID::TEXT));
+        // Determine segment ID based on symbol properties
+        auto symOpt = findSymbol(name);
+        if (symOpt.has_value()) {
+            const auto& sym = symOpt.value();
+            
+            // Functions are isConstant=true, variables are isConstant=false
+            if (sym.isConstant) {
+                // Function - lives in TEXT segment
+                global_bytes.push_back(static_cast<uint8_t>(SegmentID::TEXT));
+            } else if (sym.storage == StorageClass::ZeroPage) {
+                // Zero page variable
+                global_bytes.push_back(static_cast<uint8_t>(SegmentID::ZERO));
+            } else {
+                // Global variable - lives in DATA segment
+                global_bytes.push_back(static_cast<uint8_t>(SegmentID::DATA));
+            }
         } else {
-            global_bytes.push_back(static_cast<uint8_t>(SegmentID::DATA));
+            // Default to TEXT for unknown (likely interrupt handlers added directly)
+            global_bytes.push_back(static_cast<uint8_t>(SegmentID::TEXT));
         }
 
-        global_bytes.push_back(static_cast<uint8_t>(x.second.offset & 0xFF));
-        global_bytes.push_back(static_cast<uint8_t>((x.second.offset >> 8) & 0xFF)); // little endian
-
+        global_bytes.push_back(static_cast<uint8_t>(offset & 0xFF));
+        global_bytes.push_back(static_cast<uint8_t>((offset >> 8) & 0xFF)); // little endian
     }
-    
 
     return global_bytes;
 }
@@ -1971,22 +2009,47 @@ const std::vector<uint8_t> serializeO65(const implementation_defined::O65_File_L
     o65Data.push_back(o65::HEADER_OPTIONS_TERMINATOR);
 
     // Serialize Text Segment
-    o65Data.insert(o65Data.end(), layout.text_data, layout.text_data + header->tlen);
+    if (layout.text_data != nullptr && header->tlen > 0) {
+        o65Data.insert(o65Data.end(), layout.text_data, layout.text_data + header->tlen);
+    } 
 
     // Serialize Data Segment
-    o65Data.insert(o65Data.end(), layout.data_data, layout.data_data + header->dlen);
+    if (layout.data_data != nullptr && header->dlen > 0) {
+        o65Data.insert(o65Data.end(), layout.data_data, layout.data_data + header->dlen);
+    }
 
     // Serialize Undefined References
-    o65Data.insert(o65Data.end(), layout.undef_refs.data, layout.undef_refs.data + layout.undef_refs.size_bytes);
+    if (layout.undef_refs.data != nullptr && layout.undef_refs.size_bytes > 0) {
+        o65Data.insert(o65Data.end(), layout.undef_refs.data, layout.undef_refs.data + layout.undef_refs.size_bytes);
+    } else {
+        o65Data.push_back(0x00); // Count = 0 (low byte)
+        o65Data.push_back(0x00); // Count = 0 (high byte)
+    }
 
     // Serialize Relocation Tables
-    o65Data.insert(o65Data.end(), layout.text_reloc.data, layout.text_reloc.data + layout.text_reloc.size_bytes);
-    o65Data.insert(o65Data.end(), layout.data_reloc.data, layout.data_reloc.data + layout.data_reloc.size_bytes);
+    if (layout.text_reloc.data != nullptr && layout.text_reloc.size_bytes > 0) {
+        o65Data.insert(o65Data.end(), layout.text_reloc.data, layout.text_reloc.data + layout.text_reloc.size_bytes);
+    } else {
+        o65Data.push_back(o65::RELOCATION_TABLE_TERMINATOR); // Terminator only
+    }
+    if (layout.data_reloc.data != nullptr && layout.data_reloc.size_bytes > 0) {
+        o65Data.insert(o65Data.end(), layout.data_reloc.data, layout.data_reloc.data + layout.data_reloc.size_bytes);
+    } else {
+        o65Data.push_back(o65::RELOCATION_TABLE_TERMINATOR); // Terminator only
+    }
 
     // Serialize Exported Globals
-    o65Data.insert(o65Data.end(), layout.exported_globals.data, layout.exported_globals.data + layout.exported_globals.size_bytes);
+    if (layout.exported_globals.data != nullptr && layout.exported_globals.size_bytes > 0) {
+        o65Data.insert(o65Data.end(), layout.exported_globals.data, layout.exported_globals.data + layout.exported_globals.size_bytes);
+    } else {
+        o65Data.push_back(0x00); // Count = 0 (low byte)
+        o65Data.push_back(0x00); // Count = 0 (high byte)
+    }
 
-
+    if (layout.next_section != nullptr) {
+        auto nextSectionData = serializeO65(*layout.next_section);
+        o65Data.insert(o65Data.end(), nextSectionData.begin(), nextSectionData.end());
+    }
 
     return o65Data;
 }
@@ -2037,6 +2100,21 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
     header16.stack = 0x0000; // unknown (need to calc later)
 
     layout.header = reinterpret_cast<O65_Header_16*>(&header16);
+
+    if (addVectorTable) {
+        static implementation_defined::O65_File_Layout vectorLayout;
+        vectorLayout = generateVectorTable();
+        if (vectorLayout.header != nullptr) {
+            layout.next_section = &vectorLayout;
+
+            O65_Mode newMode = layout.mode;
+            newMode.chain = ChainFlag::CHAINED;
+            layout.mode = newMode;
+            header16.mode = layout.mode.encode();
+        }
+    } else {
+        layout.next_section = nullptr; // No idk what else it'd be rn
+    }
     
     layout.text_data = textSegment.data();
     layout.data_data = dataSegment.data();
@@ -2044,14 +2122,14 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
     auto undef = writeUndefinedReferences();
     auto globals = writeExportedGlobals();
     auto text_reloc = writeRelocationTable(textRelocs, header16.tbase);
-    auto data_reloc = writeRelocationTable(textRelocs, header16.dbase);
+    auto data_reloc = writeRelocationTable(dataRelocs, header16.dbase); // seriously, why tf was this passing textRelocs
 
     layout.undef_refs = implementation_defined::O65_Table_View{undef.data(), static_cast<uint32_t>(undef.size())};
     layout.text_reloc = implementation_defined::O65_Table_View{text_reloc.data(), static_cast<uint32_t>(text_reloc.size())};
     layout.data_reloc = implementation_defined::O65_Table_View{data_reloc.data(), static_cast<uint32_t>(data_reloc.size())};
     layout.exported_globals = implementation_defined::O65_Table_View{globals.data(), static_cast<uint32_t>(globals.size())};
 
-    layout.next_section = nullptr; // not implemented yet
+    
 
     // Build header options
     auto headerOptions = buildHeaderOptions();
@@ -2081,20 +2159,153 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
     return o65Data;
 }
 
-std::vector<uint8_t> CodegenVisitor::generateVectorTable()
+implementation_defined::O65_File_Layout CodegenVisitor::generateVectorTable()
 {
-    // Generate the 6502 vector table (6 bytes at $FFFA-$FFFF)
-    // Format: NMI (2 bytes), RESET (2 bytes), IRQ/BRK (2 bytes)
-    std::vector<uint8_t> vectors(6, 0x00);
+    static implementation_defined::O65_File_Layout layout = {};
+    static O65_Header_16 header = {};
+    static std::vector<uint8_t> textData;
+    static std::vector<uint8_t> undef_bytes;
+    static std::vector<uint8_t> reloc_bytes;
+    static std::vector<uint8_t> empty_reloc;
+    static std::vector<uint8_t> empty_globals;
+    static bool initialized = false;
     
-    // These will need to be relocated by the linker
-    // For now, we return placeholder addresses
-    // The actual addresses will be filled in by the linker based on exported globals
+    if (!initialized) {
+        initialized = true;
+        
+        // Initialize layout to safe defaults
+        layout.header = nullptr;
+        layout.text_data = nullptr;
+        layout.data_data = nullptr;
+        layout.undef_refs = {nullptr, 0};
+        layout.text_reloc = {nullptr, 0};
+        layout.data_reloc = {nullptr, 0};
+        layout.exported_globals = {nullptr, 0};
+        layout.next_section = nullptr;
+        
+        uint8_t needed = 0x00;
+        if (nmiHandler.has_value()) needed |= 0x01;
+        if (resetHandler.has_value()) needed |= 0x02;
+        if (irqHandler.has_value()) needed |= 0x04;
+        
+        // Just export the symbols
+        if (nmiHandler.has_value()) {
+            auto sym = findSymbol(nmiHandler.value());
+            if (sym.has_value()) {
+                exportedGlobals.push_back({"_nmi_handler", sym->offset});
+            }
+        }
+        
+        if (resetHandler.has_value()) {
+            auto sym = findSymbol(resetHandler.value());
+            if (sym.has_value()) {
+                exportedGlobals.push_back({"_reset_handler", sym->offset});
+            }
+        }
+
+        if (irqHandler.has_value()) {
+            auto sym = findSymbol(irqHandler.value());
+            if (sym.has_value()) {
+                exportedGlobals.push_back({"_irq_handler", sym->offset});
+            }
+        }
+
+        uint8_t offset = 0;
+        uint8_t size = 6;
+
+        // Use logical NOT (!) instead of bitwise NOT (~) for boolean checks
+        if (!(needed & 0x01)) {
+            size -= 2;
+        }
+        // Only exclude the middle vector (RESET) if it doesn't create a gap 
+        // between NMI and IRQ. i.e., at least one of NMI or IRQ must also be missing.
+        if (!(needed & 0x02) && (!(needed & 0x01) || !(needed & 0x04))) {
+            size -= 2;
+        }
+        if (!(needed & 0x04)) {
+            size -= 2;
+        }
+
+        if (size == 0) {
+            // No vectors needed, return empty layout
+            layout.header = nullptr;
+            return layout;
+        }
+
+        if (!(needed & 0x01) && !(needed & 0x02)) {
+            offset = 4; // Skip NMI and RESET
+        } else if (!(needed & 0x01)) {
+            offset = 2; // Skip NMI
+        }
+
+        std::memcpy(header.marker, o65::NON_C64_MARKER, 2);
+        std::memcpy(header.magic, o65::MAGIC_NUMBER, 3);
+        header.version = 0x00;
+        header.mode = getMode().encode();
+        header.tbase = 0xFFFA + offset; // Vector table base address
+        header.tlen = size;       // Number of vectors * 2 bytes
+        header.dlen = 0;
+        header.zlen = 0;
+        header.stack = 0;
+
+        // The text segment for this file is just the placeholder bytes for the vectors
+        textData.resize(size, 0x00);
+        
+        std::vector<std::string> imports;
+        std::vector<o65::O65_Relocation_Entry> relocs;
+
+        // Helper to generate an import referencing the exported handlers from the main object
+        auto addHandlerReloc = [&](const std::optional<std::string>& handler, const std::string& importName, uint32_t vecOffset) {
+            if (handler.has_value()) {
+                size_t idx = imports.size();
+                imports.push_back(importName);
+
+                o65::O65_Relocation_Entry entry;
+                entry.offset_from_previous = 0;
+                entry.absolute_offset = vecOffset;
+                entry.typebyte = o65::make_typebyte(o65::RelocationType::WORD, o65::SegmentID::UNDEFINED);
+                entry.symbol_index = static_cast<uint8_t>(idx);
+                entry.low_byte = 0;
+                entry.seg_offset = 0;
+                
+                relocs.push_back(entry);
+            }
+        };
+
+        // NMI at offset 0 (0xFFFA), RESET at 2 (0xFFFC), IRQ at 4 (0xFFFE)
+        if (needed & 0x01) addHandlerReloc(nmiHandler, "_nmi_handler", 0);
+        if (needed & 0x02) addHandlerReloc(resetHandler, "_reset_handler", (needed & 0x01) ? 2 : 0);
+        if (needed & 0x04) addHandlerReloc(irqHandler, "_irq_handler", size - 2);
+
+        // Serialize the imports (undefined references) table
+        size_t count = imports.size();
+        undef_bytes.push_back(count & 0xFF);
+        undef_bytes.push_back((count >> 8) & 0xFF);
+        for (const auto& name : imports) {
+            for (char c : name) undef_bytes.push_back(c);
+            undef_bytes.push_back(0);
+        }
+
+        // Serialize relocation table
+        // Pass 0 as base since absolute_offset in relocs is segment-relative
+        reloc_bytes = writeRelocationTable(relocs, 0);
+        
+        // Create empty terminators for unused segments
+        empty_reloc = {o65::RELOCATION_TABLE_TERMINATOR};
+        empty_globals = {0x00, 0x00}; // Count = 0
+
+        layout.header = &header;
+        layout.mode = getMode();
+        layout.text_data = textData.data();
+        layout.data_data = nullptr;
+        layout.undef_refs = {undef_bytes.data(), static_cast<uint32_t>(undef_bytes.size())};
+        layout.text_reloc = {reloc_bytes.data(), static_cast<uint32_t>(reloc_bytes.size())};
+        layout.data_reloc = {empty_reloc.data(), static_cast<uint32_t>(empty_reloc.size())};
+        layout.exported_globals = {empty_globals.data(), static_cast<uint32_t>(empty_globals.size())};
+        layout.next_section = nullptr;
+    }
     
-    // Note: In a real implementation, you'd add relocation entries for these
-    // pointing to the appropriate handler symbols
-    
-    return vectors;
+    return layout;
 }
 
 // ============================================================================

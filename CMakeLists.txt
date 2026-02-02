@@ -21,6 +21,8 @@ set(SOURCES src/main.cpp src/lexer.cpp src/parser.cpp src/codegen.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
+target_include_directories(${PROJECT_NAME} PRIVATE include)
+
 include(CTest)
 enable_testing()
 

@@ -688,7 +688,7 @@ struct O65_Relocation_Entry {
     uint32_t offset_from_previous; ///< Offset from previous relocation address
     uint32_t absolute_offset;      ///< Absolute offset in segment
     uint8_t typebyte;              ///< Combined relocation type and segment ID
-    uint32_t symbol_index;         ///< Symbol index (if UNDEFINED), else 0
+    uint16_t symbol_index;         ///< Symbol index (if UNDEFINED), else 0
     uint8_t low_byte;              ///< Low byte (if HIGH relocation), else 0
     uint16_t seg_offset;           ///< Two-byte offset (if SEG relocation), else 0
     

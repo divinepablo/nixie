@@ -454,10 +454,13 @@ public:
     void visit(MemberReferenceNode &node) override;
     void visit(ReturnNode &node) override;
 
+
     // --- Finalization ---
     // Assembles the segments into a final O65 binary blob
     std::vector<uint8_t> generateO65();
     
     // Generate the 6502 vector table segment
-    std::vector<uint8_t> generateVectorTable();
+    // std::vector<uint8_t> generateVectorTable();
+    bool addVectorTable = false;
+    implementation_defined::O65_File_Layout generateVectorTable();
 };
