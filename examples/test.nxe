@@ -1,7 +1,8 @@
 // Pseudo-code for your compiler
-__zeropage var TTY: ptr[u8] = 0x4000; // Forced address
+var TTY: ptr[u8] = 0x0000; // Forced address
 __interrupt(reset) fn main() {
+    TTY = 0x4000; // Initialize TTY pointer
     // while(true) {
-        @TTY = 'a'; // Write 'A' to TTY
+    @TTY = 'a'; // Write 'A' to TTY
     // }
 }

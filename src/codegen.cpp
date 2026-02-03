@@ -24,7 +24,7 @@ void CodegenVisitor::emitDataWord(uint16_t word)
     emitData(static_cast<uint8_t>((word & 0xFF00) >> 8));
 }
 
-void CodegenVisitor::addTextReloc(o65::RelocationType type, o65::SegmentID target)
+void CodegenVisitor::addTextReloc(o65::RelocationType type, o65::SegmentID target, uint8_t low_byte)
 {
     // We store the absolute offset within the text segment here.
     // The generateO65() function will convert this to the delta-encoded format required by the spec.
@@ -42,13 +42,14 @@ void CodegenVisitor::addTextReloc(o65::RelocationType type, o65::SegmentID targe
 
     entry.typebyte = o65::make_typebyte(type, target);
     entry.symbol_index = 0; 
-    entry.low_byte = 0;
+    // For HIGH relocations, store the low byte for proper carry calculation during relocation
+    entry.low_byte = low_byte;
     entry.seg_offset = 0;
 
     textRelocs.push_back(entry);
 }
 
-void CodegenVisitor::addDataReloc(o65::RelocationType type, o65::SegmentID target)
+void CodegenVisitor::addDataReloc(o65::RelocationType type, o65::SegmentID target, uint8_t low_byte)
 {
     O65_Relocation_Entry entry;
     entry.offset_from_previous = 0; // Calculated later
@@ -62,7 +63,8 @@ void CodegenVisitor::addDataReloc(o65::RelocationType type, o65::SegmentID targe
 
     entry.typebyte = o65::make_typebyte(type, target);
     entry.symbol_index = 0;
-    entry.low_byte = 0;
+    // For HIGH relocations, store the low byte for proper carry calculation during relocation
+    entry.low_byte = low_byte;
     entry.seg_offset = 0;
 
     dataRelocs.push_back(entry);
@@ -393,13 +395,22 @@ void CodegenVisitor::saveRegisterToVariable(const SymbolInfo& sym,
         offset += calculateMemberOffset(sym.type, member);
     }
     
+    // Determine if this is a 16-bit store (A = low, X = high)
+    bool is16Bit = getSizeOfType(sym.type) == 2;
+    
     switch (sym.storage) {
         case StorageClass::Global:
-            // STA absolute_address
-            emitOp(Opcodes::STA_ABSOLUTE); // STA absolute
+            // STA absolute_address (low byte)
+            emitOp(Opcodes::STA_ABSOLUTE);
             emitWord(static_cast<uint16_t>(offset));
-            // Mark for relocation
             addTextReloc(RelocationType::WORD, SegmentID::DATA);
+            
+            if (is16Bit) {
+                // STX absolute_address+1 (high byte)
+                emitOp(Opcodes::STX_ABSOLUTE);
+                emitWord(static_cast<uint16_t>(offset + 1));
+                addTextReloc(RelocationType::WORD, SegmentID::DATA);
+            }
             break;
             
         case StorageClass::Stack: {
@@ -416,15 +427,32 @@ void CodegenVisitor::saveRegisterToVariable(const SymbolInfo& sym,
                 emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
                 emit(fp);
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                if (is16Bit) {
+                    // Store high byte (X) at offset + 1
+                    emitOp(Opcodes::TXA);
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(static_cast<uint8_t>(sym.offset + 1));
+                    emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                }
             } else {
                 // Local variable - negative offset
                 auto temp = getZeroPageAllocation("__temporary_2p").value().address;
                 auto tempA = getZeroPageAllocation("__temporary").value().address;
+                auto tempX = getZeroPageAllocation("__temporary_dos").value().address;
                 
-                // Save A to temp
+                // Save A and X to temp locations
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(tempA);
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                if (is16Bit) {
+                    emitOp(Opcodes::STX_ZEROPAGE);
+                    emit(tempX);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                }
                 
                 // Compute FP - |offset| into temp2
                 emitOp(Opcodes::SEC);
@@ -446,7 +474,7 @@ void CodegenVisitor::saveRegisterToVariable(const SymbolInfo& sym,
                 emit(temp + 1);
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
                 
-                // Load A back and store through temp
+                // Load A back and store low byte through temp
                 emitOp(Opcodes::LDA_ZEROPAGE);
                 emit(tempA);
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
@@ -455,14 +483,32 @@ void CodegenVisitor::saveRegisterToVariable(const SymbolInfo& sym,
                 emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
                 emit(temp);
                 addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                
+                if (is16Bit) {
+                    // Load X back and store high byte at offset + 1
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(tempX);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(0x01);
+                    emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                    emit(temp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                }
             }
             break;
         }
             
         case StorageClass::ZeroPage:
-            // STA zeropage
-            emitOp(Opcodes::STA_ZEROPAGE); // STA zero page
+            // STA zeropage (low byte)
+            emitOp(Opcodes::STA_ZEROPAGE);
             emit(static_cast<uint8_t>(offset & 0xFF));
+            
+            if (is16Bit) {
+                // STX zeropage+1 (high byte)
+                emitOp(Opcodes::STX_ZEROPAGE);
+                emit(static_cast<uint8_t>((offset + 1) & 0xFF));
+            }
             break;
             
         case StorageClass::Register:
@@ -690,15 +736,15 @@ const std::vector<uint8_t> CodegenVisitor::writeRelocationTable(const std::vecto
 
         // Symbol index is required for UNDEFINED segment references (segment ID 0)
         // The segment ID is in the lower 5 bits of the typebyte
-        if ((get_segment_id(reloc.typebyte)) == o65::SegmentID::UNDEFINED) {
+        if (get_segment_id(reloc.typebyte) == o65::SegmentID::UNDEFINED) {
             reloc_bytes.push_back(reloc.symbol_index & 0xFF);
             reloc_bytes.push_back((reloc.symbol_index >> 8) & 0xFF);
         }
 
-        if (reloc.low_byte) {
+        if (get_relocation_type(reloc.typebyte) == o65::RelocationType::HIGH) {
             reloc_bytes.push_back(reloc.low_byte);
         }
-        if (reloc.seg_offset) {
+        if (get_relocation_type(reloc.typebyte) == o65::RelocationType::SEG) {
             reloc_bytes.push_back(reloc.seg_offset & 0xFF);
             reloc_bytes.push_back((reloc.seg_offset >> 8) & 0xFF); // little endian i think
         }
@@ -1036,7 +1082,7 @@ void CodegenVisitor::visit(UnaryNode &node)
                     
                 case StorageClass::Stack: {
                     // Address is computed from frame pointer
-                    auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+                    auto temp = getZeroPageAllocation("__temporary_dos").value().address;
                     auto fp = getZeroPageAllocation("__frame_pointer").value().address;
                     
                     // Compute FP - offset
@@ -1051,8 +1097,8 @@ void CodegenVisitor::visit(UnaryNode &node)
                     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
                     
                     emitOp(Opcodes::LDA_ZEROPAGE);
-                    emit(fp + 1);
-                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emit(fp + 1);                      // fp+1 is second byte of frame pointer (zp address)
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
                     emitOp(Opcodes::SBC_IMMEDIATE);
                     emit(0x00);
                     emitOp(Opcodes::TAX);
@@ -1134,8 +1180,8 @@ void CodegenVisitor::visit(UnaryNode &node)
             emitOp(Opcodes::LDA_IMMEDIATE);
             emit((result.value >> 8) & 0xFF);
             emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp + 1);
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            emit(temp + 1);                            // temp+1 is second byte of temp (zp address)
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
             
             evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
                             static_cast<uint32_t>(temp), 
@@ -1153,8 +1199,8 @@ void CodegenVisitor::visit(UnaryNode &node)
             emitWord(static_cast<uint16_t>(result.value + 1));
             addTextReloc(RelocationType::WORD, SegmentID::DATA);
             emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp + 1);
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            emit(temp + 1);                            // temp+1 is second byte of temp (zp address)
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
             
             evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
                             static_cast<uint32_t>(temp), 
@@ -1162,11 +1208,11 @@ void CodegenVisitor::visit(UnaryNode &node)
         } else if (result.location == ValueLocation::Accumulator) {
             // Pointer value is already in A (low) and X (high)
             emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp);
+            emit(temp);                                // temp byte 0 (low byte of pointer)
             addTextReloc(RelocationType::LOW, SegmentID::ZERO);
             emitOp(Opcodes::STX_ZEROPAGE);
-            emit(temp + 1);
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            emit(temp + 1);                            // temp byte 1 (high byte of pointer, zp address)
+            addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
             
             evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
                             static_cast<uint32_t>(temp), 
@@ -1205,8 +1251,16 @@ void CodegenVisitor::visit(AssignmentNode &node)
             evalStack.pop();
             
             // Store pointer in zero page temp
+            // Pointers are always 16-bit on 6502
             auto temp = getZeroPageAllocation("__temporary_2p").value().address;
             loadIntoRegister(ptrResult);
+            
+            // If pointer source was 8-bit, zero-extend to 16-bit
+            if (getSizeOfType(ptrResult.type) == 1) {
+                emitOp(Opcodes::LDX_IMMEDIATE);
+                emit(0x00);
+            }
+            
             emitOp(Opcodes::STA_ZEROPAGE);
             emit(temp);
             addTextReloc(RelocationType::LOW, SegmentID::ZERO);
@@ -1222,6 +1276,14 @@ void CodegenVisitor::visit(AssignmentNode &node)
             // Load expression value into accumulator
             loadIntoRegister(exprResult);
             
+            // Determine if we're storing a 16-bit value
+            bool is16Bit = getSizeOfType(exprResult.type) == 2;
+            
+            // If expression source was 8-bit but we need 16-bit, zero-extend
+            if (!is16Bit && getSizeOfType(exprResult.type) == 1) {
+                // Keep X clear for potential 16-bit operations
+            }
+            
             // Store through pointer indirection: STA (zp),Y with Y=0
             emitOp(Opcodes::LDY_IMMEDIATE);
             emit(0x00);
@@ -1230,7 +1292,7 @@ void CodegenVisitor::visit(AssignmentNode &node)
             addTextReloc(RelocationType::LOW, SegmentID::ZERO);
             
             // Handle 16-bit stores: STA (zp),Y with Y=1
-            if (getSizeOfType(exprResult.type) == 2) {
+            if (is16Bit) {
                 emitOp(Opcodes::TXA);
                 emitOp(Opcodes::LDY_IMMEDIATE);
                 emit(0x01);
@@ -1746,8 +1808,8 @@ void CodegenVisitor::visit(ReferenceNode &node)
                 emit(0x00);
 
                 emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2 + 1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emit(temp2 + 1);                       // temp2+1 is second byte of temp2 (zp address)
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
 
                 emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
                 emit(temp2);
@@ -1782,13 +1844,14 @@ void CodegenVisitor::visit(ReferenceNode &node)
                 emit(0x00);
 
                 emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2 + 1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emit(temp2 + 1);                       // temp2+1 is second byte of temp2 (zp address)
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
 
                 emitOp(Opcodes::LDY_IMMEDIATE);
 
                 emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
                 emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 
                 emitOp(Opcodes::PHA);
 
@@ -1796,6 +1859,7 @@ void CodegenVisitor::visit(ReferenceNode &node)
                 emit(0x01);
                 emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
                 emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
                 emitOp(Opcodes::TAX);
 
                 emitOp(Opcodes::PLA);
@@ -1840,8 +1904,8 @@ void CodegenVisitor::visit(ReferenceNode &node)
                 
                 // Load high byte
                 emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(static_cast<uint8_t>((symbol.offset + 1) & 0xFF));
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emit(static_cast<uint8_t>((symbol.offset + 1) & 0xFF));  // second byte of zp variable
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);       // ZP addresses are 8-bit, use LOW
                 emitOp(Opcodes::TAX);
                 
                 emitOp(Opcodes::PLA);
@@ -2330,8 +2394,8 @@ void CodegenVisitor::emitMultiply8Shift()
     emit(resultLo);
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STX_ZEROPAGE);
-    emit(resultHi);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emit(resultHi);                                    // resultHi = resultLo+1 (zp address)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
     
     // Save multiplier to Y for counting
     emitOp(Opcodes::TAY);
@@ -2365,13 +2429,13 @@ void CodegenVisitor::emitMultiply8Shift()
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(resultHi);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emit(resultHi);                                    // resultHi = resultLo+1 (zp address)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
     emitOp(Opcodes::ADC_IMMEDIATE);
     emit(0x00);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(resultHi);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emit(resultHi);                                    // resultHi = resultLo+1 (zp address)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
     
     emitLabel(skipAdd);
     
@@ -2393,8 +2457,8 @@ void CodegenVisitor::emitMultiply8Shift()
     
     // Load result into A (low) and X (high)
     emitOp(Opcodes::LDX_ZEROPAGE);
-    emit(resultHi);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emit(resultHi);                                    // resultHi = resultLo+1 (zp address)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
     emitOp(Opcodes::LDA_ZEROPAGE);
     emit(resultLo);
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
@@ -2417,7 +2481,7 @@ void CodegenVisitor::emitMultiply8Table()
     auto resultLo = getZeroPageAllocation("__temporary_2p").value().address;
     auto resultHi = resultLo + 1;
     auto sumIdx = temp;
-    auto diffIdx = temp + 1;
+    auto diffIdx = getZeroPageAllocation("__temporary_tres").value().address;
     
     // Save A (multiplier) to temp
     emitOp(Opcodes::STA_ZEROPAGE);
@@ -2476,8 +2540,8 @@ void CodegenVisitor::emitMultiply8Table()
     emit(static_cast<uint8_t>(((squaresTableOffset + 256) >> 8) & 0xFF));
     addTextReloc(RelocationType::WORD, SegmentID::DATA);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(resultHi);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emit(resultHi);                                    // resultHi = resultLo+1 (zp address)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
     
     // Subtract sq[diff] from result
     emitOp(Opcodes::LDY_ZEROPAGE);
@@ -2499,8 +2563,8 @@ void CodegenVisitor::emitMultiply8Table()
     
     // resultHi -= sqHi[diff] - borrow
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(resultHi);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emit(resultHi);                                    // resultHi = resultLo+1 (zp address)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
     emitOp(Opcodes::SBC_ABSOLUTE_Y);
     emit(static_cast<uint8_t>((squaresTableOffset + 256) & 0xFF));
     emit(static_cast<uint8_t>(((squaresTableOffset + 256) >> 8) & 0xFF));
@@ -2540,21 +2604,28 @@ void CodegenVisitor::emitMultiply16Shift()
 {
     // 16-bit multiply using shift-and-add algorithm
     // Input: __temporary (2 bytes) = multiplier, __temporary_2p (2 bytes) = multiplicand
-    // Output: __temporary_2p (4 bytes) = 32-bit result (low to high)
+    // Output: A (low), X (high) = 16-bit result (overflow discarded)
+    //
+    // ZERO PAGE REQUIREMENTS:
+    //   __temporary    : 2 bytes (multiplier, bytes 0-1)
+    //   __temporary_2p : 2 bytes (multiplicand, bytes 0-1)
+    //   __temporary_dos: 2 bytes (result accumulator, bytes 0-1)
+    //
+    // NOTE: All zp+N accesses assume contiguous allocation within each variable
     
-    auto multiplier = getZeroPageAllocation("__temporary").value().address;
-    auto multiplicand = getZeroPageAllocation("__temporary_2p").value().address;
-    auto result = getZeroPageAllocation("__temporary_dos").value().address; // Need 4 bytes for result
+    auto multiplier = getZeroPageAllocation("__temporary").value().address;      // 2 bytes
+    auto multiplicand = getZeroPageAllocation("__temporary_2p").value().address; // 2 bytes
+    auto result = getZeroPageAllocation("__temporary_dos").value().address;      // 2 bytes for 16-bit result
     
-    // We'll use __temporary_dos as 4-byte result, then copy back
-    // Initialize result to 0
+    // Initialize 16-bit result to 0
     emitOp(Opcodes::LDA_IMMEDIATE);
     emit(0x00);
-    for (int i = 0; i < 4; ++i) {
-        emitOp(Opcodes::STA_ZEROPAGE);
-        emit(result + i);
-        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    }
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(result);                                      // result byte 0 (low)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(result + 1);                                  // result byte 1 (high)
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     // Loop 16 times
     emitOp(Opcodes::LDX_IMMEDIATE);
@@ -2567,95 +2638,62 @@ void CodegenVisitor::emitMultiply16Shift()
     
     // Check if LSB of multiplier is set
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(multiplier);
+    emit(multiplier);                                  // multiplier byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::AND_IMMEDIATE);
     emit(0x01);
     emitJump(Opcodes::BEQ, skipAdd);
     
-    // Add multiplicand to result (32-bit add)
+    // Add multiplicand to result (16-bit add)
     emitOp(Opcodes::CLC);
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(result);
+    emit(result);                                      // result byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ADC_ZEROPAGE);
-    emit(multiplicand);
+    emit(multiplicand);                                // multiplicand byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(result);
+    emit(result);                                      // result byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(result + 1);
+    emit(result + 1);                                  // result byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ADC_ZEROPAGE);
-    emit(multiplicand + 1);
+    emit(multiplicand + 1);                            // multiplicand byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(result + 1);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    
-    emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(result + 2);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::ADC_IMMEDIATE);
-    emit(0x00);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(result + 2);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    
-    emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(result + 3);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::ADC_IMMEDIATE);
-    emit(0x00);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(result + 3);
+    emit(result + 1);                                  // result byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     emitLabel(skipAdd);
     
-    // Shift multiplicand left by 1 (32-bit shift)
+    // Shift multiplicand left by 1 (16-bit shift)
     emitOp(Opcodes::ASL_ZEROPAGE);
-    emit(multiplicand);
+    emit(multiplicand);                                // multiplicand byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ROL_ZEROPAGE);
-    emit(multiplicand + 1);
+    emit(multiplicand + 1);                            // multiplicand byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     // Shift multiplier right by 1 (16-bit shift)
     emitOp(Opcodes::LSR_ZEROPAGE);
-    emit(multiplier + 1);
+    emit(multiplier + 1);                              // multiplier byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ROR_ZEROPAGE);
-    emit(multiplier);
+    emit(multiplier);                                  // multiplier byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     // Decrement counter and loop
     emitOp(Opcodes::DEX);
     emitJump(Opcodes::BNE, loopStart);
     
-    // Copy result back to __temporary_2p (just low 16 bits for now)
-    emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(result);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(multiplicand);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    
-    emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(result + 1);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(multiplicand + 1);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    
-    // Load result into A (low) and X (high)
+    // Load 16-bit result into A (low) and X (high)
     emitOp(Opcodes::LDX_ZEROPAGE);
-    emit(result + 1);
+    emit(result + 1);                                  // result byte 1 -> X
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(result);
+    emit(result);                                      // result byte 0 -> A
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 }
 
@@ -2663,29 +2701,35 @@ void CodegenVisitor::emitDivide16()
 {
     // 16-bit divide using binary long division
     // Input: __temporary (2 bytes) = dividend, __temporary_2p (2 bytes) = divisor
-    // Output: __temporary = quotient, __temporary_2p = remainder
-    // Algorithm: For each bit, shift remainder left, bring in next dividend bit,
-    //            compare to divisor, subtract if >=, shift result bit into quotient
+    // Output: A (low), X (high) = 16-bit quotient
+    //         Remainder is left in __temporary_dos+2 (2 bytes) if needed
+    //
+    // ZERO PAGE REQUIREMENTS:
+    //   __temporary    : 2 bytes (dividend, bytes 0-1)
+    //   __temporary_2p : 2 bytes (divisor, bytes 0-1)
+    //   __temporary_dos: 4 bytes (quotient bytes 0-1, remainder bytes 2-3)
+    //
+    // NOTE: All zp+N accesses assume contiguous allocation within each variable
     
-    auto dividend = getZeroPageAllocation("__temporary").value().address;
-    auto divisor = getZeroPageAllocation("__temporary_2p").value().address;
-    auto quotient = getZeroPageAllocation("__temporary_dos").value().address;
-    auto remainder = quotient + 2;
+    auto dividend = getZeroPageAllocation("__temporary").value().address;       // 2 bytes
+    auto divisor = getZeroPageAllocation("__temporary_2p").value().address;     // 2 bytes
+    auto quotient = getZeroPageAllocation("__temporary_dos").value().address;   // 2 bytes (bytes 0-1)
+    auto remainder = quotient + 2;                                               // 2 bytes (bytes 2-3)
     
     // Initialize quotient and remainder to 0
     emitOp(Opcodes::LDA_IMMEDIATE);
     emit(0x00);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(quotient);
+    emit(quotient);                                    // quotient byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(quotient + 1);
+    emit(quotient + 1);                                // quotient byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(remainder);
+    emit(remainder);                                   // remainder byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(remainder + 1);
+    emit(remainder + 1);                               // remainder byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     // Loop 16 times (for 16-bit division)
@@ -2700,43 +2744,43 @@ void CodegenVisitor::emitDivide16()
     
     // Shift quotient left by 1 (to make room for new bit)
     emitOp(Opcodes::ASL_ZEROPAGE);
-    emit(quotient);
+    emit(quotient);                                    // quotient byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ROL_ZEROPAGE);
-    emit(quotient + 1);
+    emit(quotient + 1);                                // quotient byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     // Shift remainder left by 1, bringing in MSB of dividend
     emitOp(Opcodes::ASL_ZEROPAGE);
-    emit(dividend);
+    emit(dividend);                                    // dividend byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ROL_ZEROPAGE);
-    emit(dividend + 1);
+    emit(dividend + 1);                                // dividend byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ROL_ZEROPAGE);
-    emit(remainder);
+    emit(remainder);                                   // remainder byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::ROL_ZEROPAGE);
-    emit(remainder + 1);
+    emit(remainder + 1);                               // remainder byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     // Compare remainder >= divisor (16-bit comparison)
     // Compare high bytes first
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(remainder + 1);
+    emit(remainder + 1);                               // remainder byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::CMP_ZEROPAGE);
-    emit(divisor + 1);
+    emit(divisor + 1);                                 // divisor byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitJump(Opcodes::BCC, afterCheck); // remainder < divisor (high byte less)
     emitJump(Opcodes::BNE, doSubtract); // remainder > divisor (high byte greater)
     
     // High bytes equal, check low bytes
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(remainder);
+    emit(remainder);                                   // remainder byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::CMP_ZEROPAGE);
-    emit(divisor);
+    emit(divisor);                                     // divisor byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitJump(Opcodes::BCC, afterCheck); // remainder < divisor
     
@@ -2745,28 +2789,28 @@ void CodegenVisitor::emitDivide16()
     // remainder >= divisor: subtract and set quotient bit
     emitOp(Opcodes::SEC);
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(remainder);
+    emit(remainder);                                   // remainder byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::SBC_ZEROPAGE);
-    emit(divisor);
+    emit(divisor);                                     // divisor byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(remainder);
+    emit(remainder);                                   // remainder byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(remainder + 1);
+    emit(remainder + 1);                               // remainder byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::SBC_ZEROPAGE);
-    emit(divisor + 1);
+    emit(divisor + 1);                                 // divisor byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::STA_ZEROPAGE);
-    emit(remainder + 1);
+    emit(remainder + 1);                               // remainder byte 1
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     // Set LSB of quotient (we already shifted, so just INC)
     emitOp(Opcodes::INC_ZEROPAGE);
-    emit(quotient);
+    emit(quotient);                                    // quotient byte 0
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     
     emitLabel(afterCheck);
@@ -2775,34 +2819,12 @@ void CodegenVisitor::emitDivide16()
     emitOp(Opcodes::DEX);
     emitJump(Opcodes::BNE, loopStart);
     
-    // Copy quotient to __temporary
+    // Load 16-bit quotient into A (low) and X (high)
+    emitOp(Opcodes::LDX_ZEROPAGE);
+    emit(quotient + 1);                                // quotient byte 1 -> X
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
     emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(quotient);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(dividend);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    
-    emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(quotient + 1);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(dividend + 1);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    
-    // Copy remainder to __temporary_2p
-    emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(remainder);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(divisor);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    
-    emitOp(Opcodes::LDA_ZEROPAGE);
-    emit(remainder + 1);
-    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-    emitOp(Opcodes::STA_ZEROPAGE);
-    emit(divisor + 1);
+    emit(quotient);                                    // quotient byte 0 -> A
     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 }
 

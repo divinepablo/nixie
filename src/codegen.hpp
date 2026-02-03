@@ -25,8 +25,8 @@ private:
     
     // Reserve system areas (6502 convention)
     static constexpr uint8_t SYSTEM_START = 0x00;
-    static constexpr uint8_t SYSTEM_END = 0x08;    // Stack pointer area
-    static constexpr uint8_t USER_START = 0x08;
+    static constexpr uint8_t SYSTEM_END = 0x0D;    // Stack pointer area
+    static constexpr uint8_t USER_START = 0x0D;
     static constexpr uint8_t USER_END = 0xFF;
     
     uint8_t nextFreeAddress;
@@ -272,8 +272,9 @@ private:
     
     // --- Relocation Helpers ---
     // Mark the last emitted word/byte as needing relocation
-    void addTextReloc(o65::RelocationType type, o65::SegmentID target);
-    void addDataReloc(o65::RelocationType type, o65::SegmentID target);
+    // For HIGH relocations, low_byte must contain the corresponding low byte for carry calculation
+    void addTextReloc(o65::RelocationType type, o65::SegmentID target, uint8_t low_byte = 0);
+    void addDataReloc(o65::RelocationType type, o65::SegmentID target, uint8_t low_byte = 0);
 
     // --- Scope & Symbol Management ---
     void enterScope();
@@ -422,12 +423,17 @@ public:
         enterScope();
 
         // Reserve zero page addresses for system use
-        zeroPageAllocator.reserve(0x00, 8); // Stack pointer area
-        zeroPageAllocations.push_back({"__stack_pointer", 0x00, 2});
-        zeroPageAllocations.push_back({"__frame_pointer", 0x02, 2});
-        zeroPageAllocations.push_back({"__temporary", 0x04, 1});
-        zeroPageAllocations.push_back({"__temporary_dos", 0x05, 1});
-        zeroPageAllocations.push_back({"__temporary_2p", 0x06, 2});
+        // Layout: $00-$01 stack_pointer, $02-$03 frame_pointer, $04-$05 temporary (2 bytes for 16-bit ops)
+        //         $06-$09 temporary_dos (4 bytes for 32-bit intermediate results in divide)
+        //         $0A-$0B temporary_2p (2 bytes for pointer operations)
+        //         $0C temporary_tres (1 byte scratch)
+        zeroPageAllocator.reserve(0x00, 13); // Reserve $00-$0C
+        zeroPageAllocations.push_back({"__stack_pointer", 0x00, 2});    // 2 bytes: $00-$01
+        zeroPageAllocations.push_back({"__frame_pointer", 0x02, 2});    // 2 bytes: $02-$03
+        zeroPageAllocations.push_back({"__temporary", 0x04, 2});        // 2 bytes: $04-$05 (for 16-bit multiply result)
+        zeroPageAllocations.push_back({"__temporary_dos", 0x06, 4});    // 4 bytes: $06-$09 (for 32-bit divide intermediate)
+        zeroPageAllocations.push_back({"__temporary_2p", 0x0A, 2});     // 2 bytes: $0A-$0B (for pointer ops)
+        zeroPageAllocations.push_back({"__temporary_tres", 0x0C, 1});   // 1 byte:  $0C (scratch)
 
     }
 
