@@ -23,6 +23,9 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE include)
 
+add_executable(nixie-ld src/linker.cpp)
+target_include_directories(nixie-ld PRIVATE include src)
+
 include(CTest)
 enable_testing()
 
@@ -62,11 +65,6 @@ endif()
 target_link_libraries(compiler_tests PRIVATE GTest::gtest_main)
 include(GoogleTest)
 gtest_discover_tests(compiler_tests)
-# endif()
-
-# 1. (Optional) External Libraries If you install {fmt} via 'sudo apt install
-#   libfmt-dev' in WSL2: find_package(fmt REQUIRED)
-#   target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                                                  "${CMAKE_BINARY_DIR}/bin")

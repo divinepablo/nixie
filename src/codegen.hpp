@@ -329,7 +329,7 @@ private:
         res.file_type = o65::FileType::OBJECT_FILE;
         res.simple_mode = o65::SimpleAddressing::NORMAL;
         res.chain = o65::ChainFlag::STANDALONE;
-        res.bss_zero = o65::BssZeroFlag::MUST_ZERO;
+        res.bss_zero = o65::BssZeroFlag::NO_REQUIREMENT; // bss is not in final binary (from RAM)
         res.cpu2_type = o65::CPU2Type::CPU2_65C02; // current necessity
         res.alignment = o65::AlignmentMode::ALIGN_BYTE;
         return res;

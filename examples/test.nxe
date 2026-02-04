@@ -3,6 +3,8 @@ var TTY: ptr[u8] = 0x0000; // Forced address
 __interrupt(reset) fn main() {
     TTY = 0x4000; // Initialize TTY pointer
     // while(true) {
-    @TTY = 'a'; // Write 'A' to TTY
     // }
+    while (true) {
+        @TTY = 'a'; // Write 'A' to TTY
+    }
 }

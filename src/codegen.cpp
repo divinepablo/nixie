@@ -283,11 +283,13 @@ void CodegenVisitor::emitJump(uint8_t opcode, size_t labelId)
             // Forward reference - record position for later patching
             referenceLabel(labelId);
             emit(0x00); // Placeholder
+            addTextReloc(RelocationType::LOW, SegmentID::TEXT);
         }
     } else {
         // Absolute jump (JMP/JSR) - 16-bit address
         if (label.location.has_value()) {
             emitWord(static_cast<uint16_t>(*label.location));
+            addTextReloc(RelocationType::WORD, SegmentID::TEXT);
         } else {
             // Forward reference
             referenceLabel(labelId);
@@ -1603,12 +1605,15 @@ void CodegenVisitor::visit(FunctionNode &node)
         switch (node.interruptType) {
             case InterruptType::NMI:
                 nmiHandler = name;
+                exportedGlobals.push_back(std::make_pair("_nmi_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::RESET:
                 resetHandler = name;
+                exportedGlobals.push_back(std::make_pair("_reset_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::IRQ:
                 irqHandler = name;
+                exportedGlobals.push_back(std::make_pair("_irq_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::NONE:
                 break;
@@ -2164,7 +2169,7 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
     header16.stack = 0x0000; // unknown (need to calc later)
 
     layout.header = reinterpret_cast<O65_Header_16*>(&header16);
-
+    layout.next_section = nullptr; // No idk what else it'd be rn
     if (addVectorTable) {
         static implementation_defined::O65_File_Layout vectorLayout;
         vectorLayout = generateVectorTable();
@@ -2176,8 +2181,6 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
             layout.mode = newMode;
             header16.mode = layout.mode.encode();
         }
-    } else {
-        layout.next_section = nullptr; // No idk what else it'd be rn
     }
     
     layout.text_data = textSegment.data();
