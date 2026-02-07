@@ -283,5 +283,5 @@ std::vector<Token> Lexer::tokenize()
 
 std::string Token::to_string() const
 {
-    return "Token(Type: " + std::to_string(static_cast<int>(this->type)) + ", Value: \"" + std::string(this->value) + "\")\n";
+    return "Token(Type: " + std::to_string(static_cast<int>(this->type)) + ", Value: \"" + std::string(this->value) + "\")";
 }

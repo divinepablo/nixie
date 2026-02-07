@@ -66,6 +66,7 @@ struct UnaryNode;
 struct WhileNode;
 struct MemberReferenceNode;
 struct ReturnNode;
+struct CrescereNode;
 
 // 2. Create the unified Type struct
 struct AstType {
@@ -140,6 +141,7 @@ public:
     virtual void visit(WhileNode &node) = 0;
     virtual void visit(MemberReferenceNode &node) = 0;
     virtual void visit(ReturnNode &node) = 0;
+    virtual void visit(CrescereNode &node) = 0;
 };
 
 constexpr Comparison tokenToComparison(const Token token) {
@@ -326,5 +328,13 @@ struct ReturnNode : Node
 {
     std::unique_ptr<Node> expression; // nullptr for void return
     explicit ReturnNode(std::unique_ptr<Node> expr = nullptr) : expression(std::move(expr)) {}
+    void accept(Visitor &v) override { v.visit(*this); }
+};
+struct CrescereNode : Node
+{
+    std::unique_ptr<Node> expression; // nullptr for void return
+    bool decrement = false;
+    bool pre = true;
+    explicit CrescereNode(std::unique_ptr<Node> expr = nullptr, bool dec = false, bool isPre = true) : expression(std::move(expr)), decrement(dec), pre(isPre) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };

@@ -15,6 +15,7 @@
 #include <optional>
 #include <stdexcept>
 #include <algorithm>
+#include <set>
 
 using namespace o65;
 
@@ -242,6 +243,7 @@ private:
     std::vector<Scope> scopes;      // Stack of scopes
     std::map<std::string, StructInfo> structDefinitions; // Struct registry
     std::vector<Label> labels;      // Control flow labels
+    std::map<std::string_view, size_t> strings;
     
 
     std::stack<EvaluationResult> evalStack;
@@ -256,7 +258,7 @@ private:
     // Track zero page allocations for cleanup
     std::vector<ZeroPageAllocation> zeroPageAllocations;
 
-    constexpr std::optional<ZeroPageAllocation> getZeroPageAllocation(std::string name) {
+    const std::optional<ZeroPageAllocation> getZeroPageAllocation(std::string name) {
         for (auto zp : zeroPageAllocations) {
             if (zp.symbolName == name)
                 return zp;
@@ -296,6 +298,9 @@ private:
     // void loadNumberToRegister(const EvaluationResult &numResult);
     void storeNumberToMemory(uint32_t value, size_t offset, StorageClass storage, TypeKind kind);
 
+    size_t getString(std::string_view str); // string interning!!
+    
+
     inline size_t getOrCreateUndefinedReference(const std::string& name) {
         // Check if already in list
         auto it = std::find(undefinedList.begin(), undefinedList.end(), name);
@@ -306,6 +311,19 @@ private:
         // Add new undefined reference
         undefinedList.push_back(name);
         return undefinedList.size() - 1;
+    }
+
+    inline size_t loadUndefinedConstant(uint8_t opcode, const std::string& name, RelocationType type) {
+        size_t symIndex = getOrCreateUndefinedReference(name);
+        
+        emit(opcode);
+        emit(0x00); // Placeholder low byte
+        
+        // Add relocation entry for this constant
+        addTextReloc(type, SegmentID::UNDEFINED);
+        textRelocs.back().symbol_index = static_cast<uint16_t>(symIndex);
+        
+        return symIndex;
     }
 
     inline StructInfo& getStructDefinition(const AstType& type) {
@@ -459,6 +477,7 @@ public:
     void visit(WhileNode &node) override;
     void visit(MemberReferenceNode &node) override;
     void visit(ReturnNode &node) override;
+    void visit(CrescereNode &node) override;
 
 
     // --- Finalization ---

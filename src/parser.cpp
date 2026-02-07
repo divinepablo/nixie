@@ -198,8 +198,14 @@ std::unique_ptr<VariableNode> Parser::parseVariableDeclaration(bool constant, bo
     consume(Type::IDENTIFIER);
     consume(Type::COLON);
     auto type = parseType(currentToken);
-    consume(Type::ASSIGN);
-    return std::make_unique<VariableNode>(VariableNode(name, type, parseExpression(), constant, zeropage, strutype));
+    if (currentToken.type == Type::ASSIGN) {
+        consume(Type::ASSIGN);
+        return std::make_unique<VariableNode>(VariableNode(name, type, parseExpression(), constant, zeropage, strutype));
+    } else {
+        if (constant)
+            throw std::runtime_error("Constant variable must be initialized");
+        return std::make_unique<VariableNode>(VariableNode(name, type, nullptr, false, zeropage, strutype));
+    }
 }
 
 std::unique_ptr<Node> Parser::parseStatement()
@@ -502,14 +508,15 @@ std::unique_ptr<Node> Parser::parseAdditive()
 {
     auto left = parseMultiplicative();
 
-    if (currentToken.type == Type::PLUS || currentToken.type == Type::MINUS)
+    while (currentToken.type == Type::PLUS || currentToken.type == Type::MINUS)
     {
         Token operate = currentToken;
         consume(operate.type);
         auto right = parseMultiplicative();
 
         auto operatr = tokenToOperator(operate);
-        return std::make_unique<BinaryOperationNode>(BinaryOperationNode(operatr, std::move(left), std::move(right)));
+        // return std::make_unique<BinaryOperationNode>(BinaryOperationNode(operatr, std::move(left), std::move(right)));
+        left = std::make_unique<BinaryOperationNode>(BinaryOperationNode(operatr, std::move(left), std::move(right)));
     }
 
     return left;
@@ -519,14 +526,15 @@ std::unique_ptr<Node> Parser::parseMultiplicative()
 {
     auto left = parseUnary();
 
-    if (currentToken.type == Type::ASTERISK || currentToken.type == Type::SLASH)
+    while (currentToken.type == Type::ASTERISK || currentToken.type == Type::SLASH)
     {
         Token operate = currentToken;
         consume(operate.type);
         auto right = parseUnary();
 
         auto operatr = tokenToOperator(operate);
-        return std::make_unique<BinaryOperationNode>(BinaryOperationNode(operatr, std::move(left), std::move(right)));
+        // return std::make_unique<BinaryOperationNode>(BinaryOperationNode(operatr, std::move(left), std::move(right)));
+        left = std::make_unique<BinaryOperationNode>(BinaryOperationNode(operatr, std::move(left), std::move(right)));
     }
 
     return left;
@@ -534,15 +542,43 @@ std::unique_ptr<Node> Parser::parseMultiplicative()
 
 std::unique_ptr<Node> Parser::parseUnary()
 {
-    if (currentToken.type == Type::EXCLAIM || currentToken.type == Type::MINUS || currentToken.type == Type::AT || currentToken.type == Type::HASH)
+    if (currentToken.type == Type::EXCLAIM || currentToken.type == Type::AT || currentToken.type == Type::HASH)
     {
         Token op = currentToken;
         consume(op.type);
         auto operand = parseUnary();
         const auto operate = tokenToUnary(op);
         return std::make_unique<UnaryNode>(UnaryNode(operate, std::move(operand)));
+    } else if (currentToken.type == Type::PLUS || currentToken.type == Type::MINUS) {
+        auto hi = currentToken;
+        consume(hi.type);
+        if (currentToken.type == hi.type) {
+            consume(currentToken.type);
+            return std::make_unique<CrescereNode>(CrescereNode(parsePostfix(), hi.type == Type::MINUS, true)); 
+        }
+        else if (hi.type == Type::MINUS) {
+            const auto operate = tokenToUnary(hi);
+            return std::make_unique<UnaryNode>(UnaryNode(operate, parseUnary()));
+        }
+        return parseUnary();
     }
-    return parsePrimary();
+    return parsePostfix();
+}
+
+std::unique_ptr<Node> Parser::parsePostfix()
+{
+    auto operand = parsePrimary(); // ngl idfk what an operand is, english is stupid (context clues saving me rn)
+    if (currentToken.type == Type::PLUS || currentToken.type == Type::MINUS) {
+        auto hi = currentToken;
+        
+        if (peek().type == hi.type)
+        {
+            consume(hi.type);
+            consume(currentToken.type);
+            return std::make_unique<CrescereNode>(CrescereNode(std::move(operand), hi.type == Type::MINUS, false)); 
+        }
+    }
+    return operand;
 }
 
 std::unique_ptr<Node> Parser::parsePrimary()
@@ -570,6 +606,7 @@ std::unique_ptr<Node> Parser::parsePrimary()
     }
     case Type::OPEN_PAREN:
     {
+        consume(Type::OPEN_PAREN);
         std::unique_ptr<Node> expression = parseExpression();
         consume(Type::CLOSE_PAREN);
         return expression;

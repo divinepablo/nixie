@@ -120,9 +120,9 @@ void CodegenVisitor::declareVariable(const std::string& name, AstType type, Stor
         info.offset = static_cast<int32_t>(dataSegment.size());
         
         // Reserve space in data segment (zero-init)
-        for(size_t i = 0; i < size; ++i) {
-            emitData(0);
-        }
+        // for(size_t i = 0; i < size; ++i) {
+        //     emitData(0);
+        // }
     }
 
     switch (storage) {
@@ -136,9 +136,9 @@ void CodegenVisitor::declareVariable(const std::string& name, AstType type, Stor
             // Allocate in DATA/BSS segment
         info.offset = static_cast<int32_t>(dataSegment.size());
             // Reserve space in data segment (zero-initialized)
-            for (size_t i = 0; i < size; ++i) {
-                emitData(0x00);
-            }
+            // for (size_t i = 0; i < size; ++i) {
+            //     emitData(0x00);
+            // }
             break;
             
         case StorageClass::ZeroPage: {
@@ -543,6 +543,7 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
                 emit(static_cast<uint8_t>(value & 0xFF));
                 emitOp(Opcodes::STA_ZEROPAGE); // 0x85
                 emit(static_cast<uint8_t>(offset & 0xFF));
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
             } else if (storage == StorageClass::Stack) {
                 // auto temp = getZeroPageAllocation("__temporary").value().address;
                 auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
@@ -563,14 +564,14 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
                 
                 emitOp(Opcodes::LDA_ZEROPAGE);
                 emit(fp+1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, fp);
 
                 emitOp(Opcodes::SBC_IMMEDIATE);
                 emit(0x00);
 
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(temp2 + 1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
 
                 emitOp(Opcodes::LDA_IMMEDIATE);
                 emit(static_cast<uint8_t>(value & 0xFF));
@@ -579,6 +580,7 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
                 emit(0x00);
                 emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
                 emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 
                 emitOp(Opcodes::PHA);
 
@@ -586,6 +588,8 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
                 emit(0x01);
                 emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
                 emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
                 emitOp(Opcodes::TAX);
 
                 emitOp(Opcodes::PLA);
@@ -598,22 +602,33 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
             
         case TypeKind::UNSIGNED_16:
         case TypeKind::SIGNED_16:
+        case TypeKind::STRING:
             // 16-bit store - low byte then high byte
             
             // Store low byte
             
             if (storage == StorageClass::Global) {
-            emitOp(Opcodes::LDA_IMMEDIATE);
-            emit(static_cast<uint8_t>(value & 0xFF));
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>(value & 0xFF));
+
                 emitOp(Opcodes::STA_ABSOLUTE);
                 emitWord(static_cast<uint16_t>(offset));
                 addTextReloc(RelocationType::WORD, SegmentID::DATA);
+
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>((value >> 8) & 0xFF));
+
+                emitOp(Opcodes::STA_ABSOLUTE);
+                emitWord(static_cast<uint16_t>(offset + 1));
+                addTextReloc(RelocationType::WORD, SegmentID::DATA);
+
             } else if (storage == StorageClass::ZeroPage) {
-                
-            emitOp(Opcodes::LDA_IMMEDIATE);
-            emit(static_cast<uint8_t>(value & 0xFF));
+                emitOp(Opcodes::LDA_IMMEDIATE);
+                emit(static_cast<uint8_t>(value & 0xFF));
+
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(static_cast<uint8_t>(offset & 0xFF));
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
             } else if (storage == StorageClass::Stack) {
                                 auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
                 auto fp = getZeroPageAllocation("__frame_pointer").value().address;
@@ -633,14 +648,14 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
                 
                 emitOp(Opcodes::LDA_ZEROPAGE);
                 emit(fp+1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, fp);
 
                 emitOp(Opcodes::SBC_IMMEDIATE);
                 emit(0x00);
 
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(temp2 + 1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
 
                 emitOp(Opcodes::LDA_IMMEDIATE);
                 emit(static_cast<uint8_t>(value & 0xFF));
@@ -699,6 +714,24 @@ void CodegenVisitor::storeNumberToMemory(uint32_t value, size_t offset,
             
         default:
             throw std::runtime_error("Cannot store this type");
+    }
+}
+
+size_t CodegenVisitor::getString(std::string_view str)
+{
+    auto it = strings.find(str);
+    if (it != strings.end())
+        return it->second;
+    else {
+        size_t offset = dataSegment.size();
+
+        for (char c : str) {
+            emitData(c);
+        }
+        emitData(0);
+
+        strings[str] = offset;
+        return offset;
     }
 }
 
@@ -995,16 +1028,16 @@ void CodegenVisitor::visit(DefineNode &)
 
 void CodegenVisitor::visit(StringNode &node)
 {
-    const auto offset = dataSegment.size();
-    addTextReloc(RelocationType::WORD, SegmentID::DATA);
-    for (char c : node.value) {
-        emitData(static_cast<uint8_t>(c));
-    }
-    emitData(0); // null term
+    // const auto offset = dataSegment.size();
+    // addTextReloc(RelocationType::WORD, SegmentID::DATA);
+    // for (char c : node.value) {
+    //     emitData(static_cast<uint8_t>(c));
+    // }
+    // emitData(0); // null term
 
     EvaluationResult result{};
     result.location = ValueLocation::DataSegment;
-    result.value = static_cast<uint32_t>(offset);
+    result.value = static_cast<uint32_t>(getString(node.value));
     result.type = AstType::Primitive(TypeKind::STRING, 0); // implied pointer
     
     evalStack.push(result);
@@ -1600,6 +1633,7 @@ void CodegenVisitor::visit(FunctionNode &node)
         SymbolInfo symbol{name, AstType::Primitive(TypeKind::UNKNOWN), StorageClass::Global, static_cast<int32_t>(textSegment.size()), true, false, 2};
 
         exportedGlobals.push_back(std::make_pair(name, static_cast<int32_t>(textSegment.size())));
+        scopes.back().symbols.emplace(std::make_pair(name, symbol));
         
         // Track interrupt handler assignments for vector table
         switch (node.interruptType) {
@@ -1632,9 +1666,94 @@ void CodegenVisitor::visit(FunctionNode &node)
         
         if (node.isInterrupt()) { 
             // Save registers for interrupt handler
-            emitOp(Opcodes::PHA);
-            emitOp(Opcodes::PHX);
-            emitOp(Opcodes::PHY);
+            if (node.interruptType == InterruptType::RESET) 
+            {
+                auto temp = getZeroPageAllocation("__temporary").value().address;
+                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
+
+                // source
+                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_SORC__", RelocationType::LOW);
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_SORC__", RelocationType::HIGH);
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp + 1);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+
+                // destination
+                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::LOW);
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::HIGH);
+                emitOp(Opcodes::STA_ZEROPAGE);
+                emit(temp2 + 1);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+
+                loadUndefinedConstant(Opcodes::LDX_IMMEDIATE, "__DATA_SIZE__", RelocationType::HIGH); // full page count
+                
+                auto remaindereded = createLabel("check_remaindered");
+                emitJump(Opcodes::BEQ, remaindereded);
+
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x00);
+
+                auto pageCopyLoop = createLabel("page_copy_loop");
+
+                emitLabel(pageCopyLoop);
+
+                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                emitOp(Opcodes::INY);
+                emitJump(Opcodes::BNE, pageCopyLoop);
+
+                emitOp(Opcodes::INC_ZEROPAGE);
+                emit(temp + 1);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+                emitOp(Opcodes::INC_ZEROPAGE);
+                emit(temp2 + 1);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+
+                emitOp(Opcodes::DEX);
+                emitJump(Opcodes::BNE, pageCopyLoop);
+
+                emitLabel(remaindereded);
+
+                loadUndefinedConstant(Opcodes::LDX_IMMEDIATE, "__DATA_SIZE__", RelocationType::LOW); // remainder bytes
+                auto done = createLabel("done_data_copy");
+                emitJump(Opcodes::BEQ, done);
+
+                emitOp(Opcodes::LDY_IMMEDIATE);
+                emit(0x00);
+
+                auto remainder_loop = createLabel("remainder_loop");
+                emitLabel(remainder_loop);
+
+                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                emit(temp);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+                emit(temp2);
+                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                emitOp(Opcodes::INY);
+                emitOp(Opcodes::DEX);
+                emitJump(Opcodes::BNE, remainder_loop);
+                emitLabel(done);
+            } else
+            {
+                emitOp(Opcodes::PHA);
+                emitOp(Opcodes::PHX);
+                emitOp(Opcodes::PHY);
+            }
+            
         } 
         else {
             emitPrologue(frameSize);
@@ -1744,11 +1863,26 @@ void CodegenVisitor::visit(VariableNode &node)
         if (node.value.get() != nullptr) {
             node.value->accept(*this);
             auto result = evalStack.top(); evalStack.pop();
-            if (result.location != ValueLocation::Immediate) {
+            if (result.location == ValueLocation::Accumulator || result.location == ValueLocation::DereferencedPointer) {
                 throw std::runtime_error("Non-constant value assigned to variable initialization");
             }
 
-            emitData(result.value);
+            if (getSizeOfType(result.type) > getSizeOfType(node.type)) {
+                throw std::runtime_error("Type size mismatch in variable initialization");
+            }
+
+            if (getSizeOfType(node.type) == 1) {
+                emitData(static_cast<uint8_t>(result.value & 0xFF));
+            } else if (getSizeOfType(node.type) == 2) {
+                emitDataWord(static_cast<uint16_t>(result.value & 0xFFFF));
+            } else {
+                throw std::runtime_error("Variable initialization for types larger than 16 bits not yet supported");
+            }
+
+            if (result.type == TypeKind::STRING && result.type == node.type) {
+                addDataReloc(RelocationType::WORD, SegmentID::DATA);
+            }
+            
         } else {
             // Default initialize to zero
             size_t typeSize = getSizeOfType(node.type);
@@ -1944,22 +2078,17 @@ void CodegenVisitor::visit(CallNode &node)
         evalStack.pop();
     }
 
-    emitOp(Opcodes::JSR);
-    emitWord(static_cast<uint16_t>(funcSymOpt->offset));
     if (funcSymOpt->isExternal) {
-        // Emit JSR with relocation to undefined symbol
         emitOp(Opcodes::JSR);
         emitWord(0x0000); // Placeholder
-        // Add relocation entry pointing to undefined symbol
         addTextReloc(RelocationType::WORD, SegmentID::UNDEFINED);
-        // The relocation entry needs the symbol index
         textRelocs.back().symbol_index = funcSymOpt->offset; // undefined index
     } else {
         emitOp(Opcodes::JSR);
         emitWord(static_cast<uint16_t>(funcSymOpt->offset));
+        addTextReloc(RelocationType::WORD, SegmentID::TEXT);
     }
 
-    pushRegister(AstType::Primitive(TypeKind::UNSIGNED_16)); // Return address pushed onto stack
 }
 
 void CodegenVisitor::visit(IfNode &node)
@@ -2256,26 +2385,26 @@ implementation_defined::O65_File_Layout CodegenVisitor::generateVectorTable()
         if (irqHandler.has_value()) needed |= 0x04;
         
         // Just export the symbols
-        if (nmiHandler.has_value()) {
-            auto sym = findSymbol(nmiHandler.value());
-            if (sym.has_value()) {
-                exportedGlobals.push_back({"_nmi_handler", sym->offset});
-            }
-        }
+        // if (nmiHandler.has_value()) {
+        //     auto sym = findSymbol(nmiHandler.value());
+        //     if (sym.has_value()) {
+        //         exportedGlobals.push_back({"_nmi_handler", sym->offset});
+        //     }
+        // }
         
-        if (resetHandler.has_value()) {
-            auto sym = findSymbol(resetHandler.value());
-            if (sym.has_value()) {
-                exportedGlobals.push_back({"_reset_handler", sym->offset});
-            }
-        }
+        // if (resetHandler.has_value()) {
+        //     auto sym = findSymbol(resetHandler.value());
+        //     if (sym.has_value()) {
+        //         exportedGlobals.push_back({"_reset_handler", sym->offset});
+        //     }
+        // }
 
-        if (irqHandler.has_value()) {
-            auto sym = findSymbol(irqHandler.value());
-            if (sym.has_value()) {
-                exportedGlobals.push_back({"_irq_handler", sym->offset});
-            }
-        }
+        // if (irqHandler.has_value()) {
+        //     auto sym = findSymbol(irqHandler.value());
+        //     if (sym.has_value()) {
+        //         exportedGlobals.push_back({"_irq_handler", sym->offset});
+        //     }
+        // }
 
         uint8_t offset = 0;
         uint8_t size = 6;
@@ -3049,5 +3178,135 @@ void CodegenVisitor::visit(ReturnNode &node)
     } else {
         emitEpilogue(0); // frameSize not used in current implementation
         emitOp(Opcodes::RTS);
+    }
+}
+
+void CodegenVisitor::visit(CrescereNode &node)
+{
+    if (node.pre) {
+        node.expression->accept(*this);
+
+        auto hi = evalStack.top();
+        evalStack.pop();
+        switch (hi.location) {
+            case ValueLocation::Accumulator: {
+                loadIntoRegister(hi);
+                if (node.decrement)
+                    emitOp(Opcodes::DEA);
+                else
+                    emitOp(Opcodes::INA);
+
+                if (getSizeOfType(hi.type) >= 2) {
+                    auto interscope = createLabel("incrementationed");
+                    emitJump(Opcodes::BNE, interscope);
+                    referenceLabel(interscope);
+                    if (node.decrement)
+                        emitOp(Opcodes::DEX);
+                    else
+                        emitOp(Opcodes::INX);
+                }
+                break;
+            }
+            case ValueLocation::DataSegment: {
+                if (node.decrement) 
+                    emitOp(Opcodes::DEC_ABSOLUTE);
+                else
+                    emitOp(Opcodes::INC_ABSOLUTE);
+                emitWord(hi.value);
+                addTextReloc(RelocationType::WORD, SegmentID::DATA);
+                break;
+            }
+            case ValueLocation::Immediate: {
+                if (node.decrement) 
+                    evalStack.push(EvaluationResult{ValueLocation::Immediate, hi.value - 1, hi.type});
+                else
+                    evalStack.push(EvaluationResult{ValueLocation::Immediate, hi.value + 1, hi.type});
+                break;
+            }
+            case ValueLocation::DereferencedPointer: {
+                return; // im not dealing with this critical thinking at 7 am 
+            }
+        }
+        return evalStack.push(EvaluationResult{ValueLocation::Accumulator, 0, hi.type});
+    } else {
+        node.expression->accept(*this);
+        auto result = evalStack.top();
+        evalStack.pop();
+
+        loadIntoRegister(result);
+        pushRegister(result.type); // Save OLD value
+
+        // Calculate New Value
+        bool is16Bit = getSizeOfType(result.type) >= 2;
+        if (node.decrement) {
+            if (is16Bit) {
+                emitOp(Opcodes::SEC);
+                emitOp(Opcodes::SBC_IMMEDIATE);
+                emit(1);
+                auto skip = createLabel("dec16_skip");
+                emitJump(Opcodes::BCS, skip);
+                emitOp(Opcodes::DEX);
+                referenceLabel(skip);
+            } else {
+                emitOp(Opcodes::DEA);
+            }
+        } else {
+            if (is16Bit) {
+                emitOp(Opcodes::CLC);
+                emitOp(Opcodes::ADC_IMMEDIATE);
+                emit(1);
+                auto skip = createLabel("inc16_skip");
+                emitJump(Opcodes::BCC, skip);
+                emitOp(Opcodes::INX);
+                referenceLabel(skip);
+            } else {
+                emitOp(Opcodes::INA);
+            }
+        }
+
+        // Write Back
+        if (auto* ref = dynamic_cast<ReferenceNode*>(node.expression.get())) {
+            auto symOpt = findSymbol(std::string(ref->name));
+            if (symOpt) {
+                auto& sym = *symOpt;
+                switch (sym.storage) {
+                    case StorageClass::Stack:
+                        storeStackVariable(sym.offset, getSizeOfType(sym.type));
+                        break;
+                    case StorageClass::ZeroPage:
+                        emitOp(Opcodes::STA_ZEROPAGE);
+                        emit(sym.offset);
+                        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                        if (is16Bit) {
+                            emitOp(Opcodes::TXA);
+                            emitOp(Opcodes::STA_ZEROPAGE);
+                            emit(sym.offset + 1);
+                            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                        }
+                        break;
+                    case StorageClass::Global:
+                        if (is16Bit) {
+                            emitOp(Opcodes::STA_ABSOLUTE);
+                            emitWord(sym.offset);
+                            addTextReloc(RelocationType::WORD, SegmentID::DATA);
+                            emitOp(Opcodes::TXA);
+                            emitOp(Opcodes::STA_ABSOLUTE);
+                            emitWord(sym.offset + 1);
+                            addTextReloc(RelocationType::WORD, SegmentID::DATA);
+                        } else {
+                            emitOp(Opcodes::STA_ABSOLUTE);
+                            emitWord(sym.offset);
+                            addTextReloc(RelocationType::WORD, SegmentID::DATA);
+                        }
+                        break;
+                    default: break;
+                }
+            }
+        }
+        
+        popRegister(result.type); // Restore OLD value
+        
+        // Return result
+        evalStack.push(EvaluationResult{ValueLocation::Accumulator, 0, result.type});
     }
 }

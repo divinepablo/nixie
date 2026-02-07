@@ -99,6 +99,8 @@ public:
 
     // Unary Operators (!, -)
     std::unique_ptr<Node> parseUnary();
+
+    std::unique_ptr<Node> parsePostfix();
     
     // Primary Literals (Variables, Numbers, Strings, Parentheses)
     std::unique_ptr<Node> parsePrimary();
