@@ -26,8 +26,8 @@ private:
     
     // Reserve system areas (6502 convention)
     static constexpr uint8_t SYSTEM_START = 0x00;
-    static constexpr uint8_t SYSTEM_END = 0x0D;    // Stack pointer area
-    static constexpr uint8_t USER_START = 0x0D;
+    static constexpr uint8_t SYSTEM_END = 0x10;    // Stack pointer area
+    static constexpr uint8_t USER_START = 0x10;
     static constexpr uint8_t USER_END = 0xFF;
     
     uint8_t nextFreeAddress;
@@ -317,9 +317,12 @@ private:
         size_t symIndex = getOrCreateUndefinedReference(name);
         
         emit(opcode);
-        emit(0x00); // Placeholder low byte
+        if (type == RelocationType::WORD) {
+            emitWord(0x0000); // Placeholder
+        } else {
+            emit(0x00); // Placeholder
+        }
         
-        // Add relocation entry for this constant
         addTextReloc(type, SegmentID::UNDEFINED);
         textRelocs.back().symbol_index = static_cast<uint16_t>(symIndex);
         
@@ -445,13 +448,15 @@ public:
         //         $06-$09 temporary_dos (4 bytes for 32-bit intermediate results in divide)
         //         $0A-$0B temporary_2p (2 bytes for pointer operations)
         //         $0C temporary_tres (1 byte scratch)
-        zeroPageAllocator.reserve(0x00, 13); // Reserve $00-$0C
+        // zeroPageAllocator.reserve(0x00, 16); // Reserve $00-$0F
         zeroPageAllocations.push_back({"__stack_pointer", 0x00, 2});    // 2 bytes: $00-$01
         zeroPageAllocations.push_back({"__frame_pointer", 0x02, 2});    // 2 bytes: $02-$03
         zeroPageAllocations.push_back({"__temporary", 0x04, 2});        // 2 bytes: $04-$05 (for 16-bit multiply result)
         zeroPageAllocations.push_back({"__temporary_dos", 0x06, 4});    // 4 bytes: $06-$09 (for 32-bit divide intermediate)
         zeroPageAllocations.push_back({"__temporary_2p", 0x0A, 2});     // 2 bytes: $0A-$0B (for pointer ops)
         zeroPageAllocations.push_back({"__temporary_tres", 0x0C, 1});   // 1 byte:  $0C (scratch)
+        zeroPageAllocations.push_back({"__temporary_cuatro", 0x0D, 1}); // 1 byte: $0D (scratch)
+        zeroPageAllocations.push_back({"__temporary_4p", 0x0E, 2});     // 2 bytes: $0E-$0F (scratch)
 
     }
 

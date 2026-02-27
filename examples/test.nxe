@@ -1,22 +1,23 @@
-// Pseudo-code for your compiler
-var TTY: ptr[u8] = 0x4000; // Forced address
-var test: str = "helpsad"; // essentially char*
+// Pointer to the character output register
+var chrout: ptr[u8] = 0x4000;
 
-fn print(string: str) {
-    // var hi: u8 = 1 + 1;
-    // var ch: ptr[u8] = string;  // Get pointer to start of string
-    // while (@ch != 0) {         // While not null terminator
-    //     @TTY = @ch;            // Write character to TTY
-    //     ch = ch + 1;           // Move to next character
-    // }
-    @TTY = @test; // Null terminator to end output
+// Print a null-terminated string
+// fn print(p: ptr[u8]) {
+//     while (@p) {
+//         @chrout = @p;
+//         p = p + 1;
+//     }
+// }
+
+fn putchar(c: u8) {
+    @chrout = c;
 }
 
+const var msg: str = "Hello World";
+
 __interrupt(reset) fn main() {
-    // TTY = 0x4000; // Initialize TTY pointer
-    // while(true) {
-    // }
-    
-    print(test);
-    while (true) {}
+    // print(msg);
+    while (true) {
+        putchar('H'); // 'H');
+    }
 }

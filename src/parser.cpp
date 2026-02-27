@@ -593,7 +593,7 @@ std::unique_ptr<Node> Parser::parsePrimary()
     {
         char charValue = currentToken.value[0];
         consume(Type::CHARACTER);
-        return std::make_unique<NumberNode>(NumberNode(static_cast<int64_t>(charValue)));
+        return std::make_unique<NumberNode>(NumberNode(static_cast<int32_t>(charValue)));
     }
     case Type::STRING:
     {

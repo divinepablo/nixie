@@ -1287,7 +1287,7 @@ void CodegenVisitor::visit(AssignmentNode &node)
             
             // Store pointer in zero page temp
             // Pointers are always 16-bit on 6502
-            auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+            auto temp = getZeroPageAllocation("__temporary_4p").value().address;
             loadIntoRegister(ptrResult);
             
             // If pointer source was 8-bit, zero-extend to 16-bit
@@ -1680,7 +1680,7 @@ void CodegenVisitor::visit(FunctionNode &node)
                 loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_SORC__", RelocationType::HIGH);
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(temp + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp);
 
                 // destination
                 loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::LOW);
@@ -1691,7 +1691,7 @@ void CodegenVisitor::visit(FunctionNode &node)
                 loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::HIGH);
                 emitOp(Opcodes::STA_ZEROPAGE);
                 emit(temp2 + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
 
                 loadUndefinedConstant(Opcodes::LDX_IMMEDIATE, "__DATA_SIZE__", RelocationType::HIGH); // full page count
                 
@@ -1717,10 +1717,10 @@ void CodegenVisitor::visit(FunctionNode &node)
 
                 emitOp(Opcodes::INC_ZEROPAGE);
                 emit(temp + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp);
                 emitOp(Opcodes::INC_ZEROPAGE);
                 emit(temp2 + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO);
+                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
 
                 emitOp(Opcodes::DEX);
                 emitJump(Opcodes::BNE, pageCopyLoop);
