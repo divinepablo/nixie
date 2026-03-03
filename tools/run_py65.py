@@ -116,7 +116,11 @@ def main():
         }
         failed = False
         for assertion in args.assertions.split(","):
-            name, expected_str = assertion.strip().split("=")
+            if "=" not in assertion:
+                print(f"FAIL: Invalid assertion format: expected 'REGISTER=VALUE', got '{assertion.strip()}'", file=sys.stderr)
+                failed = True
+                continue
+            name, expected_str = assertion.strip().split("=", 1)
             name = name.strip().upper()
             expected = int(expected_str.strip(), 0)
             actual = reg_map.get(name)
