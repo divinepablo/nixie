@@ -234,6 +234,12 @@ std::vector<uint8_t> Linker::link()
         }
     }
 
+    // Write relocated data segment into ROM immediately after text
+    uint16_t data_offset = data_rom_address - this->config.text_base;
+    for (size_t i = 0; i < full_data.size(); ++i) {
+        final_rom[data_offset + i] = full_data[i];
+    }
+
     if (this->config.fill && this->config.text_base > 0) {
         output.resize(this->config.text_base, 0x00);
     }
