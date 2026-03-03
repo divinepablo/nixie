@@ -1,5 +1,0 @@
-if(EXISTS "/home/runner/work/nixie/nixie/build/linker_tests[1]_tests.cmake")
-  include("/home/runner/work/nixie/nixie/build/linker_tests[1]_tests.cmake")
-else()
-  add_test(linker_tests_NOT_BUILT linker_tests_NOT_BUILT)
-endif()
