@@ -15,16 +15,26 @@ else()
   add_compile_options(-Wall -Wextra -Wpedantic -Wshadow)
 endif()
 
-include_directories(include)
+include_directories(include src/include)
 
-set(SOURCES src/main.cpp src/lexer.cpp src/parser.cpp src/codegen.cpp)
+set(SOURCES 
+  src/compiler/main.cpp
+  src/compiler/lexer.cpp
+  src/compiler/parser.cpp
+  src/compiler/codegen.cpp
+)
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-target_include_directories(${PROJECT_NAME} PRIVATE include)
+target_include_directories(${PROJECT_NAME} PRIVATE include src/include)
 
-add_executable(nixie-ld src/linker.cpp)
-target_include_directories(nixie-ld PRIVATE include src)
+add_executable(nixie-ld src/linker/linker.cpp src/linker/main.cpp)
+target_include_directories(nixie-ld PRIVATE include src/compiler)
+target_include_directories(nixie-ld INTERFACE include src/include)
+
+# Linker library target for tests (without main)
+add_library(nixie-ld-lib STATIC src/linker/linker.cpp)
+target_include_directories(nixie-ld-lib PUBLIC include src/compiler src/include)
 
 include(CTest)
 enable_testing()
@@ -51,12 +61,12 @@ add_executable(compiler_tests
     tests/codegen_zeropage_tests.cpp
     tests/codegen_o65_tests.cpp
     tests/codegen_integration_tests.cpp
-    src/lexer.cpp
-    src/parser.cpp
-    src/codegen.cpp
+    src/compiler/lexer.cpp
+    src/compiler/parser.cpp
+    src/compiler/codegen.cpp
 )
 
-target_include_directories(compiler_tests PRIVATE include src)
+target_include_directories(compiler_tests PRIVATE include src src/include src/compiler)
 if(MSVC)
   target_compile_options(compiler_tests PRIVATE /WX-)
 else()
@@ -65,6 +75,19 @@ endif()
 target_link_libraries(compiler_tests PRIVATE GTest::gtest_main)
 include(GoogleTest)
 gtest_discover_tests(compiler_tests)
+
+# Linker tests
+add_executable(linker_tests
+    tests/linker_tests.cpp
+)
+target_include_directories(linker_tests PRIVATE include src src/include src/compiler)
+if(MSVC)
+  target_compile_options(linker_tests PRIVATE /WX-)
+else()
+  target_compile_options(linker_tests PRIVATE -Wno-error)
+endif()
+target_link_libraries(linker_tests PRIVATE GTest::gtest_main nixie-ld-lib)
+gtest_discover_tests(linker_tests)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                                                  "${CMAKE_BINARY_DIR}/bin")

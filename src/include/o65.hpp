@@ -588,6 +588,22 @@ struct O65_Header_16 {
     static constexpr size_t header_size() noexcept {
         return 26;
     }
+
+    constexpr uint16_t get_base(SegmentID segment) {
+        switch (segment)
+        {
+        case SegmentID::ZERO:
+            return zbase;
+        case SegmentID::TEXT:
+            return tbase;
+        case SegmentID::DATA:
+            return dbase;
+        case SegmentID::BSS:
+            return bbase;
+        default:
+            return 0;
+        }
+    }
 } __attribute__((packed));
 
 /**
