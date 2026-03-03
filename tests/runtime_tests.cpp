@@ -284,12 +284,23 @@ TEST_F(FunctionCallLangTest, SimpleCall) {
 TEST_F(FunctionCallLangTest, TwoSequentialCalls) {
     // Nixie:
     //   var a: u8 = 0; var b: u8 = 0
+    //   fn set_a();  fn set_b();      // forward declarations
+    //   fn main() { set_a(); set_b() }
     //   fn set_a() { a = 11 }
     //   fn set_b() { b = 22 }
-    //   fn main() { set_a(); set_b() }
     std::vector<std::unique_ptr<Node>> nodes;
     nodes.push_back(makeVariable("a", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
     nodes.push_back(makeVariable("b", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
+
+    // Forward declarations so main can call them
+    nodes.push_back(makeFunctionDecl("set_a", {}));
+    nodes.push_back(makeFunctionDecl("set_b", {}));
+
+    // main first so it's at the entry point ($8000)
+    std::vector<std::unique_ptr<Node>> mainBody;
+    mainBody.push_back(makeCall("set_a"));
+    mainBody.push_back(makeCall("set_b"));
+    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
 
     std::vector<std::unique_ptr<Node>> setABody;
     setABody.push_back(makeAssign(makeRef("a"), makeNumber(11)));
@@ -298,11 +309,6 @@ TEST_F(FunctionCallLangTest, TwoSequentialCalls) {
     std::vector<std::unique_ptr<Node>> setBBody;
     setBBody.push_back(makeAssign(makeRef("b"), makeNumber(22)));
     nodes.push_back(makeFunction("set_b", {}, std::move(setBBody)));
-
-    std::vector<std::unique_ptr<Node>> mainBody;
-    mainBody.push_back(makeCall("set_a"));
-    mainBody.push_back(makeCall("set_b"));
-    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
 
     auto binary = compileAndLink(nodes);
     run();

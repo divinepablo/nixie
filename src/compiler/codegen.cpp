@@ -971,8 +971,8 @@ void CodegenVisitor::popRegister(const AstType &type)
     if (size == 1) {
         emitOp(Opcodes::PLA);
     } else if (size == 2) {
-        emitOp(Opcodes::PLA);
-        emitOp(Opcodes::PLX);
+        emitOp(Opcodes::PLX);  // Pop high byte (was pushed last by PHX)
+        emitOp(Opcodes::PLA);  // Pop low byte (was pushed first by PHA)
     } else {
         throw std::runtime_error("Push of types larger than 16-bit not yet supported");
     }
@@ -1201,6 +1201,11 @@ void CodegenVisitor::visit(UnaryNode &node)
         // so it can be used for both reading and writing
         // The result type needs to have its pointer level decremented
         AstType dereferenced = result.type.decayPointer();
+        
+        // STRING is an implicit pointer to byte data; dereferencing yields u8
+        if (dereferenced.kind == TypeKind::STRING && dereferenced.pointerLevel == 0) {
+            dereferenced = AstType::Primitive(TypeKind::UNSIGNED_8);
+        }
         
         auto temp = getZeroPageAllocation("__temporary_2p").value().address;
         
@@ -1617,12 +1622,15 @@ void CodegenVisitor::visit(ComparisonNode &node)
     }
     emitOp(Opcodes::LDA_IMMEDIATE);
     emit(0x1);
+    auto cmp_done = createLabel("cmp_done");
+    emitJump(Opcodes::BRA, cmp_done);
     emitLabel(not_is_a_keyword);
     if (is16BitArith) {
         emitOp(Opcodes::TAX);
     }
     emitOp(Opcodes::LDA_IMMEDIATE);
     emit(0x0);
+    emitLabel(cmp_done);
     evalStack.push(EvaluationResult{ValueLocation::Accumulator, 0, leftResult.type});
 }
 
@@ -1857,15 +1865,20 @@ void CodegenVisitor::visit(StructureInitNode &node)
 void CodegenVisitor::visit(VariableNode &node)
 {
     bool isLocal = scopes.size() > 1;
-    declareVariable(std::string(node.name), node.type, (isLocal ? StorageClass::Stack : node.zeropaged ? StorageClass::ZeroPage : StorageClass::Global), getSizeOfType(node.type));
     
     if (!isLocal) {
         if (node.value.get() != nullptr) {
+            // Evaluate initializer BEFORE declaring the variable so that
+            // side-effects like getString() (which emits string data to the
+            // data segment) happen first.  This way declareVariable sees the
+            // correct data segment size and assigns the right offset.
             node.value->accept(*this);
             auto result = evalStack.top(); evalStack.pop();
             if (result.location == ValueLocation::Accumulator || result.location == ValueLocation::DereferencedPointer) {
                 throw std::runtime_error("Non-constant value assigned to variable initialization");
             }
+
+            declareVariable(std::string(node.name), node.type, (node.zeropaged ? StorageClass::ZeroPage : StorageClass::Global), getSizeOfType(node.type));
 
             if (getSizeOfType(result.type) > getSizeOfType(node.type)) {
                 throw std::runtime_error("Type size mismatch in variable initialization");
@@ -1884,6 +1897,7 @@ void CodegenVisitor::visit(VariableNode &node)
             }
             
         } else {
+            declareVariable(std::string(node.name), node.type, (node.zeropaged ? StorageClass::ZeroPage : StorageClass::Global), getSizeOfType(node.type));
             // Default initialize to zero
             size_t typeSize = getSizeOfType(node.type);
             for (size_t i = 0; i < typeSize; ++i) {
@@ -1891,6 +1905,7 @@ void CodegenVisitor::visit(VariableNode &node)
             }
         }
     } else {
+        declareVariable(std::string(node.name), node.type, StorageClass::Stack, getSizeOfType(node.type));
         if (node.value.get() != nullptr) {
             node.value->accept(*this);
             auto result = evalStack.top(); evalStack.pop();
