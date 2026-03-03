@@ -1,4 +1,4 @@
-#include "../src/lexer.hpp"
+#include "lexer.hpp"
 
 #include <gtest/gtest.h>
 #include <string>

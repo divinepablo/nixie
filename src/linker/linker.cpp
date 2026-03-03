@@ -201,6 +201,23 @@ std::vector<uint8_t> Linker::link()
     std::vector<uint8_t> final_rom;
     final_rom.resize(final_rom_size, 0x00);
 
+    // Fix parent pointers for resolved undefined references so they
+    // point at the actual ObjectFiles in object_files (which now have
+    // their new base addresses assigned).
+    for (auto& obj : object_files) {
+        for (auto& undef : obj.undefined_references) {
+            if (undef.resolved) {
+                for (auto& candidate : object_files) {
+                    for (auto& exp : candidate.exported_globals) {
+                        if (exp.name == undef.resolved->name) {
+                            undef.resolved->parent = &candidate;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     for (auto &&object_file : object_files)
     {
         this->apply_relocation_table(object_file.header.tbase, object_file.text_segment, object_file.text_relocations, object_file);
@@ -218,7 +235,7 @@ std::vector<uint8_t> Linker::link()
     }
 
     if (this->config.fill && this->config.text_base > 0) {
-        output.resize(full_data_len, 0x00);
+        output.resize(this->config.text_base, 0x00);
     }
     output.insert(output.end(), final_rom.begin(), final_rom.end());
     
@@ -461,17 +478,16 @@ void Linker::apply_relocation_table(uint16_t old_base, std::vector<uint8_t> &seg
         }
         case RelocationType::HIGH: {
             uint8_t original = segment.at(reloc.absolute_offset - old_base);
-            uint16_t relocated;
             if (reloc.segment() != SegmentID::UNDEFINED) {
-                relocated = relocate_high(original, reloc.low_byte, static_cast<uint32_t>(object.header.get_base(reloc.segment())), static_cast<uint32_t>(object.get_new_base(reloc.segment())));
+                uint8_t relocated = relocate_high(original, reloc.low_byte, static_cast<uint32_t>(object.header.get_base(reloc.segment())), static_cast<uint32_t>(object.get_new_base(reloc.segment())));
+                segment.at(reloc.absolute_offset - old_base) = relocated;
             } else {
                 auto undefined = object.undefined_references.at(reloc.symbol_index);
                 if (!undefined.resolved)
                     throw std::runtime_error("Undefined symbol '" + undefined.name + "' not resolved in relocation");
                 uint16_t exported = undefined.resolved->value + undefined.resolved->parent->get_new_base(undefined.resolved->segment);
-                relocated = (exported & 0xFF00) + (exported & 0x00FF) - original;
+                segment.at(reloc.absolute_offset - old_base) = static_cast<uint8_t>((exported >> 8) & 0xFF);
             }
-            segment.at(reloc.absolute_offset - old_base) = (relocated & 0xFF00) >> 8;
             break;
         }
         case RelocationType::WORD: {

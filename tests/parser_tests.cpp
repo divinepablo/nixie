@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../src/parser.hpp"
+#include "parser.hpp"
 #include <vector>
 #include <functional>
 #include <string>
