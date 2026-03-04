@@ -2031,6 +2031,7 @@ void CodegenVisitor::visit(ReferenceNode &node)
                     addTextReloc(RelocationType::LOW, SegmentID::ZERO);
 
                     emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(0x00);
 
                     emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
                     emit(temp2);
