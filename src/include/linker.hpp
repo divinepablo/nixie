@@ -139,7 +139,7 @@ public:
     Linker(const LinkerConfig& config) : config(config) {};
     void load_files();
     std::vector<uint8_t> link();
-    #define debug_log(msg) do { if (config.verbose) std::cout << msg << std::endl; } while(0)
+    #define debug_log(msg, ...) do { if (config.verbose) {std::cout << "[DEBUG] " << std::format(msg, __VA_ARGS__) << std::endl;} } while(0)
 private:
     LinkerConfig config;
     std::vector<ObjectFile> object_files;

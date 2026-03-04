@@ -248,7 +248,7 @@ ObjectFile Linker::parse_object_file(const std::string &filename, const file_con
     FileReader reader(data);
     auto object = ObjectFile(filename, reader.read<O65_Header_16>());
     if (object.header.is_valid()) {
-        debug_log("Parsed header for " + filename);
+        debug_log("Parsed header for {}", filename);
     } else {
         throw std::runtime_error("Invalid O65 header in file: " + filename + "(marker: " + std::to_string(object.header.marker[0]) + " " + std::to_string(object.header.marker[1]) + ", magic: " + std::to_string(object.header.magic[0]) + " " + std::to_string(object.header.magic[1]) + " " + std::to_string(object.header.magic[2]) + ")");
 
@@ -260,20 +260,20 @@ ObjectFile Linker::parse_object_file(const std::string &filename, const file_con
     }
     reader.read_byte(); // consume null terminator after options
 
-    debug_log("Reading text segment for " + filename);
+    debug_log("Reading text segment for {}", filename);
     object.text_segment.resize(object.header.tlen);
     for (size_t i = 0; i < object.header.tlen; ++i) {
         object.text_segment[i] = reader.read_byte();
     }
 
-    debug_log("Reading data segment for " + filename);
+    debug_log("Reading data segment for {}", filename);
     object.data_segment.resize(object.header.dlen);
     for (size_t i = 0; i < object.header.dlen; ++i) {
         object.data_segment[i] = reader.read_byte();
     }
 
     auto undefined_count = reader.read_word();
-    debug_log("Reading " + std::to_string(undefined_count) + " undefined references for " + filename);
+    debug_log("Reading {} undefined references for {}", undefined_count, filename);
 
     for (size_t i = 0; i < undefined_count; i++)
     {
@@ -286,16 +286,16 @@ ObjectFile Linker::parse_object_file(const std::string &filename, const file_con
         object.undefined_references.push_back(ref);
     }
 
-    debug_log("Read " + std::to_string(object.undefined_references.size()) + " undefined references for " + filename);
+    debug_log("Read {} undefined references for {}", object.undefined_references.size(), filename);
 
     parse_relocation_table(object.header.tbase, reader, object.text_relocations);
-    debug_log("Read " + std::to_string(object.text_relocations.size()) + " text relocations, at byte offset " + std::to_string(reader.tell()));
+    debug_log("Read {} text relocations, at byte offset {}", object.text_relocations.size(), reader.tell());
     
     parse_relocation_table(object.header.dbase, reader, object.data_relocations);
-    debug_log("Read " + std::to_string(object.data_relocations.size()) + " data relocations, at byte offset " + std::to_string(reader.tell()));
+    debug_log("Read {} data relocations, at byte offset {}", object.data_relocations.size(), reader.tell());
     
     uint16_t export_count = reader.read_word();
-    debug_log("Reading " + std::to_string(export_count) + " exported globals for " + filename);
+    debug_log("Reading {} exported globals for {}", export_count, filename);
     for (size_t i = 0; i < export_count; i++) {
         ExportedGlobal symbol;
         symbol.parent = &object;
@@ -305,17 +305,17 @@ ObjectFile Linker::parse_object_file(const std::string &filename, const file_con
         reader.read_byte(); // consume null terminator
         symbol.segment = static_cast<o65::SegmentID>(reader.read_byte());
         symbol.value = reader.read_word();
-        debug_log("Read exported symbol: '" + symbol.name + "' at segment " + std::to_string(static_cast<uint8_t>(symbol.segment)) + " with value " + std::to_string(symbol.value));
+        debug_log("Read exported symbol: '{}' at segment {} with value {}", symbol.name, static_cast<uint8_t>(symbol.segment), symbol.value);
         object.exported_globals.push_back(symbol);
         // this->global_symbols[symbol.name] = std::make_optional(std::make_pair(object, symbol));
     }
-    debug_log("Read " + std::to_string(object.exported_globals.size()) + " exported globals for " + filename);
-    debug_log(std::to_string(this->global_symbols.size()) + " total exported globals");
-    debug_log("Finished parsing object file: " + filename);
+    debug_log("Read {} exported globals for {}", object.exported_globals.size(), filename);
+    debug_log("{} total exported globals", this->global_symbols.size());
+    debug_log("Finished parsing object file: {}", filename);
 
     if (object.mode.chain == ChainFlag::CHAINED) {
         auto without_chain = filename.find("$") == std::string::npos ? filename : filename.substr(0, filename.find("$"));
-        debug_log("File " + filename + " is chained, loading next file in chain...");
+        debug_log("File {} is chained, loading next file in chain...", filename);
         file_content_t chained_data;
         std::copy(data.begin() + reader.tell(), data.end(), chained_data.begin()); // the chained file is just appended to the end of the current file, so we can just read from the current position to the end of the data buffer
         auto chained_object = parse_object_file(without_chain + "$" + std::to_string(++chain_count), chained_data);
@@ -351,14 +351,14 @@ void Linker::load_object_file(const std::string &filename)
             if (global_symbols.count(undefined.name) > 0) {
                 auto existing = global_symbols[undefined.name];
                 if (existing.has_value()) {
-                    debug_log("Resolved undefined reference: " + undefined.name + " in file " + current->filename + " to symbol in file " + existing->first.filename);
+                    debug_log("Resolved undefined reference: {} in file {} to symbol in file {}", undefined.name, current->filename, existing->first.filename);
                     undefined.resolved = existing.value().second;
                 } else {
-                    debug_log("Undefined reference: " + undefined.name + " in file " + current->filename + " could not be resolved");
+                    debug_log("Undefined reference: {} in file {} could not be resolved", undefined.name, current->filename);
                 }
             } else {
                 this->global_symbols[undefined.name] = std::nullopt;
-                debug_log("Undefined reference: '" + undefined.name + "' in file " + current->filename + " could not be resolved (added to global symbol table with nullopt)");
+                debug_log("Undefined reference: '{}' in file {} could not be resolved (added to global symbol table with nullopt)", undefined.name, current->filename);
             }
             
         }
@@ -415,7 +415,7 @@ void Linker::inject_symbol(ExportedGlobal symbol)
     this->global_symbols[symbol.name] = std::make_optional(
         std::make_pair(this->object_files.back(), symbol)
     );
-    debug_log("Injected symbol: " + symbol.name + " at segment " + std::to_string(static_cast<uint8_t>(symbol.segment)) + " with value " + std::to_string(symbol.value));
+    debug_log("Injected symbol: {} at segment {} with value {}", symbol.name, static_cast<uint8_t>(symbol.segment), symbol.value);
 }
 
 void Linker::parse_relocation_table(uint16_t base, FileReader &reader, std::vector<O65_Relocation_Entry> &relocations)
@@ -450,7 +450,7 @@ void Linker::parse_relocation_table(uint16_t base, FileReader &reader, std::vect
             hi.seg_offset = reader.read_word();
         }
 
-        debug_log("Added relocation at offset " + std::to_string(hi.absolute_offset) + " of type " + std::to_string(static_cast<uint8_t>(hi.type())) + " for segment " + std::to_string(static_cast<uint8_t>(hi.segment())));
+        debug_log("Added relocation at offset {} of type {} for segment {}", hi.absolute_offset, static_cast<uint8_t>(hi.type()), static_cast<uint8_t>(hi.segment()));
         relocations.push_back(hi);
     }
     reader.read_byte(); // consume terminator
