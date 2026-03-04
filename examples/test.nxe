@@ -1,23 +1,21 @@
 // Pointer to the character output register
 var chrout: ptr[u8] = 0x4000;
 
-// Print a null-terminated string
-// fn print(p: ptr[u8]) {
-//     while (@p) {
-//         @chrout = @p;
-//         p = p + 1;
-//     }
-// }
-
+// Print a single character to the output register
 fn putchar(c: u8) {
     @chrout = c;
+}
+
+// Print a null-terminated string
+fn print(p: ptr[u8]) {
+    while (@p) {
+        putchar(@p);
+        p = p + 1;
+    }
 }
 
 const var msg: str = "Hello World";
 
 __interrupt(reset) fn main() {
-    // print(msg);
-    while (true) {
-        putchar('H'); // 'H');
-    }
+    print(msg);
 }
