@@ -18,4 +18,7 @@ const var msg: str = "Hello World";
 
 __interrupt(reset) fn main() {
     print(msg);
+    while (true) {
+        // Infinite loop to prevent program from exiting
+    }
 }
