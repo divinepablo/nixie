@@ -1647,14 +1647,17 @@ void CodegenVisitor::visit(FunctionNode &node)
         switch (node.interruptType) {
             case InterruptType::NMI:
                 nmiHandler = name;
+                addVectorTable = true;
                 exportedGlobals.push_back(std::make_pair("_nmi_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::RESET:
                 resetHandler = name;
+                addVectorTable = true;
                 exportedGlobals.push_back(std::make_pair("_reset_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::IRQ:
                 irqHandler = name;
+                addVectorTable = true;
                 exportedGlobals.push_back(std::make_pair("_irq_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::NONE:

@@ -441,6 +441,120 @@ TEST_F(FunctionParamTest, RepeatedCallsNoStackOverflow) {
     EXPECT_EQ(readMem(0x0201), 1) << "output should be 1 (last call was store_val(1))";
 }
 
+TEST_F(FunctionParamTest, PutcharWritesThroughPointer) {
+    // Exactly mirrors test.nxe: putchar writes param through pointer dereference.
+    // Nixie:
+    //   var chrout: ptr[u8] = 0x0300
+    //   fn putchar(c: u8) { @chrout = c }
+    //   fn main() { putchar(0x48) }   // 'H' = 0x48
+    //
+    // After execution: memory at $0300 should be 'H' (0x48)
+    std::vector<std::unique_ptr<Node>> nodes;
+    nodes.push_back(makeVariable("chrout",
+        AstType::Primitive(TypeKind::UNSIGNED_8, 1),   // ptr[u8]
+        makeNumber(0x0300)));
+
+    nodes.push_back(makeFunctionDecl("putchar", {{"c", AstType{TypeKind::UNSIGNED_8}}}));
+
+    std::vector<std::unique_ptr<Node>> mainBody;
+    {
+        std::vector<std::unique_ptr<Node>> args;
+        args.push_back(makeNumber('H'));
+        mainBody.push_back(makeCall("putchar", std::move(args)));
+    }
+    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
+
+    // fn putchar(c: u8) { @chrout = c }
+    std::vector<std::unique_ptr<Node>> putcharBody;
+    putcharBody.push_back(makeAssign(
+        makeUnary(UnaryOperator::DEREFERENCE, makeRef("chrout")),
+        makeRef("c")
+    ));
+    nodes.push_back(makeFunction("putchar", {{"c", AstType{TypeKind::UNSIGNED_8}}}, std::move(putcharBody)));
+
+    auto binary = compileAndLink(nodes);
+    ASSERT_FALSE(binary.empty());
+    run();
+
+    EXPECT_EQ(readMem(0x0300), 'H')
+        << "@chrout should write 'H' (0x48) to address $0300";
+}
+
+TEST_F(FunctionParamTest, PrintStringThroughPointer) {
+    // Full test.nxe pattern: print iterates a string calling putchar per char.
+    // Nixie:
+    //   var chrout: ptr[u8] = 0x0300   // just a RAM address for test
+    //   var msg: string = "AB"
+    //   var count: u8 = 0
+    //   fn putchar(c: u8) { @chrout = c; count = count + 1 }
+    //   fn print(p: ptr[u8]) {
+    //       while (@p != 0) { putchar(@p); p = p + 1 }
+    //   }
+    //   fn main() { print(msg) }
+    //
+    // After execution: count should be 2
+    std::vector<std::unique_ptr<Node>> nodes;
+    nodes.push_back(makeVariable("chrout",
+        AstType::Primitive(TypeKind::UNSIGNED_8, 1),
+        makeNumber(0x0300)));
+    nodes.push_back(makeVariable("msg", AstType{TypeKind::STRING}, makeString("AB")));
+    nodes.push_back(makeVariable("count", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
+
+    nodes.push_back(makeFunctionDecl("putchar", {{"c", AstType{TypeKind::UNSIGNED_8}}}));
+    nodes.push_back(makeFunctionDecl("print", {{"p", AstType::Primitive(TypeKind::UNSIGNED_8, 1)}}));
+
+    // fn main() { print(msg) }
+    std::vector<std::unique_ptr<Node>> mainBody;
+    {
+        std::vector<std::unique_ptr<Node>> args;
+        args.push_back(makeRef("msg"));
+        mainBody.push_back(makeCall("print", std::move(args)));
+    }
+    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
+
+    // fn putchar(c: u8) { @chrout = c; count = count + 1 }
+    std::vector<std::unique_ptr<Node>> putcharBody;
+    putcharBody.push_back(makeAssign(
+        makeUnary(UnaryOperator::DEREFERENCE, makeRef("chrout")),
+        makeRef("c")
+    ));
+    putcharBody.push_back(makeAssign(
+        makeRef("count"),
+        makeBinary(Operator::ADD, makeRef("count"), makeNumber(1))
+    ));
+    nodes.push_back(makeFunction("putchar", {{"c", AstType{TypeKind::UNSIGNED_8}}}, std::move(putcharBody)));
+
+    // fn print(p: ptr[u8]) { while (@p != 0) { putchar(@p); p = p + 1 } }
+    std::vector<std::unique_ptr<Node>> loopBody;
+    {
+        std::vector<std::unique_ptr<Node>> args;
+        args.push_back(makeUnary(UnaryOperator::DEREFERENCE, makeRef("p")));
+        loopBody.push_back(makeCall("putchar", std::move(args)));
+    }
+    loopBody.push_back(makeAssign(
+        makeRef("p"),
+        makeBinary(Operator::ADD, makeRef("p"), makeNumber(1))
+    ));
+    std::vector<std::unique_ptr<Node>> printBody;
+    printBody.push_back(makeWhile(
+        makeComp(Comparison::NOT_EQUAL,
+                 makeUnary(UnaryOperator::DEREFERENCE, makeRef("p")),
+                 makeNumber(0)),
+        std::move(loopBody)
+    ));
+    nodes.push_back(makeFunction("print", {{"p", AstType::Primitive(TypeKind::UNSIGNED_8, 1)}}, std::move(printBody)));
+
+    auto binary = compileAndLink(nodes);
+    ASSERT_FALSE(binary.empty());
+    run();
+
+    // count lives after chrout(2 bytes) + msg(2 bytes) + "AB\0"(3 bytes) = offset 7
+    // → $0200 + 7 = $0207
+    uint16_t countAddr = 0x0207;
+    EXPECT_EQ(readMem(countAddr), 2)
+        << "count should be 2 after print(\"AB\")";
+}
+
 // ============================================================================
 // INTERRUPT HANDLER (verifies RTI is emitted)
 // ============================================================================
