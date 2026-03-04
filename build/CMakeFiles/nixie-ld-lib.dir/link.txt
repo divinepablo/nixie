@@ -1,0 +1,2 @@
+/usr/bin/ar qc libnixie-ld-lib.a "CMakeFiles/nixie-ld-lib.dir/src/linker/linker.cpp.o"
+/usr/bin/ranlib libnixie-ld-lib.a
