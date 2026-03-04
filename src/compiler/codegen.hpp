@@ -387,6 +387,11 @@ private:
     // Purpose: Emits PLA (and PLX/PLY) depending on type size.
     // Called when: Restoring temporary results in BinaryOp.
 
+    // Adjust hardware stack pointer upward by n bytes (caller-side stack cleanup)
+    void emitStackAdjust(size_t n);
+    // Purpose: Emits TSX / INX×n / TXS to discard n bytes from the hardware stack.
+    // Called when: After JSR in visit(CallNode) to clean up pushed arguments.
+
     // Emit conditional branch with long-jump fallback
     void emitConditionalBranch(uint8_t opcode, size_t labelId);
     // Purpose: Emits BNE/BEQ. Checks distance. If >127 bytes, inverts logic and jumps.

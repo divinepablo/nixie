@@ -978,6 +978,17 @@ void CodegenVisitor::popRegister(const AstType &type)
     }
 }
 
+void CodegenVisitor::emitStackAdjust(size_t n)
+{
+    // Discard n bytes from the hardware stack by adjusting SP upward.
+    // Uses TSX / INX×n / TXS (simple and correct; performance is secondary).
+    emitOp(Opcodes::TSX);
+    for (size_t i = 0; i < n; ++i) {
+        emitOp(Opcodes::INX);
+    }
+    emitOp(Opcodes::TXS);
+}
+
 void CodegenVisitor::emitConditionalBranch(uint8_t opcode, size_t labelId)
 {
     uint8_t inverseOp;
@@ -2071,9 +2082,14 @@ void CodegenVisitor::visit(CallNode &node)
         throw std::runtime_error("Undeclared function: " + std::string(node.name));
     }
 
-    for (auto&& param : node.parameters) {
-        param->accept(*this);
+    // Calling convention: push arguments right-to-left so that the first
+    // declared parameter lands closest to the return address / frame pointer
+    // after the callee's prologue.  Track total pushed bytes for cleanup.
+    size_t totalArgBytes = 0;
+    for (size_t i = node.parameters.size(); i-- > 0;) {
+        node.parameters[i]->accept(*this);
         loadIntoRegister(evalStack.top());
+        totalArgBytes += getSizeOfType(evalStack.top().type);
         pushRegister(evalStack.top().type);
         evalStack.pop();
     }
@@ -2087,6 +2103,12 @@ void CodegenVisitor::visit(CallNode &node)
         emitOp(Opcodes::JSR);
         emitWord(static_cast<uint16_t>(funcSymOpt->offset));
         addTextReloc(RelocationType::WORD, SegmentID::TEXT);
+    }
+
+    // Caller-side stack cleanup: discard the argument bytes pushed before the
+    // call so the hardware stack is balanced when execution continues.
+    if (totalArgBytes > 0) {
+        emitStackAdjust(totalArgBytes);
     }
 
 }
