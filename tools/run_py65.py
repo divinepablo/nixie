@@ -6,7 +6,8 @@ Loads a flat binary file into a py65 MPU65C02 instance, sets the reset vector,
 and executes until BRK. Prints a register dump and optionally checks assertions.
 
 Usage:
-    python tools/run_py65.py program.bin [--base 0x8000] [--assert A=0x42,X=0x00]
+    python tools/run_py65.py program.bin [--base 0x8000] [--reset 0x8200]
+                                         [--assert A=0x42,X=0x00]
                                          [--mem 0x0200:16]
 
 Requirements:
@@ -41,6 +42,13 @@ def main():
         help="Memory range to dump: ADDR:LEN (hex), e.g. 0x0200:16",
     )
     parser.add_argument(
+        "--reset",
+        type=lambda x: int(x, 0),
+        default=None,
+        help="Reset vector address (default: same as --base). Use when your "
+             "entry point differs from the load address.",
+    )
+    parser.add_argument(
         "--max-cycles",
         type=int,
         default=100000,
@@ -72,9 +80,10 @@ def main():
         if base + i < 0x10000:
             mpu.memory[base + i] = byte
 
-    # Set reset vector
-    mpu.memory[0xFFFC] = base & 0xFF
-    mpu.memory[0xFFFD] = (base >> 8) & 0xFF
+    # Set reset vector (use --reset if provided, otherwise default to --base)
+    reset_addr = args.reset if args.reset is not None else base
+    mpu.memory[0xFFFC] = reset_addr & 0xFF
+    mpu.memory[0xFFFD] = (reset_addr >> 8) & 0xFF
 
     # Reset CPU
     mpu.reset()
