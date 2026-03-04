@@ -1,1 +1,0 @@
-/usr/bin/c++ -g -Wl,--dependency-file=CMakeFiles/nixie-ld.dir/link.d "CMakeFiles/nixie-ld.dir/src/linker/linker.cpp.o" "CMakeFiles/nixie-ld.dir/src/linker/main.cpp.o" -o nixie-ld

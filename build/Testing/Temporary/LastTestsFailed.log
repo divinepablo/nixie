@@ -1,7 +1,0 @@
-105:CodegenRelocationTest.TextRelocs_StringCreatesReloc
-114:ZeroPageAllocatorTest.Allocate_ExactlyMaxUserArea
-126:ZeroPageAllocatorTest.Available_InitialState
-128:ZeroPageAllocatorTest.Available_AfterFree
-129:ZeroPageAllocatorTest.LargestBlock_InitialState
-132:ZeroPageAllocatorTest.TotalAllocated_InitialState
-168:CodegenIntegrationTestFull.FunctionCall_WithRelocation

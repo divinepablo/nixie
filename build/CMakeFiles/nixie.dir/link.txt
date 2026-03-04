@@ -1,1 +1,0 @@
-/usr/bin/c++ -g -Wl,--dependency-file=CMakeFiles/nixie.dir/link.d CMakeFiles/nixie.dir/src/compiler/main.cpp.o CMakeFiles/nixie.dir/src/compiler/lexer.cpp.o CMakeFiles/nixie.dir/src/compiler/parser.cpp.o CMakeFiles/nixie.dir/src/compiler/codegen.cpp.o -o bin/nixie

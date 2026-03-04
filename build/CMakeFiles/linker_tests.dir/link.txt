@@ -1,1 +1,0 @@
-/usr/bin/c++ -g -Wl,--dependency-file=CMakeFiles/linker_tests.dir/link.d CMakeFiles/linker_tests.dir/tests/linker_tests.cpp.o -o linker_tests  lib/libgtest_main.a libnixie-ld-lib.a lib/libgtest.a
