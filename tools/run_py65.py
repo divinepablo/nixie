@@ -76,9 +76,12 @@ def main():
 
     # Load binary at base address
     base = args.base
+    end_addr = min(base + len(data), 0x10000)
     for i, byte in enumerate(data):
         if base + i < 0x10000:
             mpu.memory[base + i] = byte
+
+    print(f"Loaded {len(data)} bytes at ${base:04X}-${end_addr - 1:04X}")
 
     # Set reset vector:
     # - If --reset is explicitly provided, always use that value.
@@ -89,17 +92,34 @@ def main():
         reset_addr = args.reset
         mpu.memory[0xFFFC] = reset_addr & 0xFF
         mpu.memory[0xFFFD] = (reset_addr >> 8) & 0xFF
+        print(f"Reset vector (--reset): ${reset_addr:04X}")
     else:
         vec_lo = mpu.memory[0xFFFC]
         vec_hi = mpu.memory[0xFFFD]
+        embedded_vec = vec_lo | (vec_hi << 8)
         if vec_lo == 0 and vec_hi == 0:
             reset_addr = base
             mpu.memory[0xFFFC] = reset_addr & 0xFF
             mpu.memory[0xFFFD] = (reset_addr >> 8) & 0xFF
+            print(f"Reset vector (fallback to --base): ${reset_addr:04X}")
+            if base == 0:
+                print(
+                    "WARNING: Reset vector is $0000. The binary has no embedded "
+                    "vector table at $FFFC.\n"
+                    "  This usually means the compiler did not generate a vector "
+                    "table.\n"
+                    "  Rebuild the compiler, recompile your .nxe, and relink with "
+                    "--fill -Z.\n"
+                    "  Or pass --reset <addr> to set the entry point manually.",
+                    file=sys.stderr,
+                )
+        else:
+            print(f"Reset vector (from binary): ${embedded_vec:04X}")
 
     # Reset CPU — use the reset vector in memory (0xFFFC-0xFFFD)
     mpu.start_pc = None
     mpu.reset()
+    print(f"Initial PC: ${mpu.pc:04X}")
 
     # Execute until BRK or max cycles
     cycles = 0
@@ -110,9 +130,23 @@ def main():
         cycles += 1
 
     # Print register dump
+    print()
     print(f"PC=${mpu.pc:04X}  A=${mpu.a:02X}  X=${mpu.x:02X}  Y=${mpu.y:02X}  "
           f"SP=${mpu.sp:02X}  P=${mpu.p:02X}")
     print(f"Cycles: {cycles}")
+
+    if cycles == 0:
+        print(
+            "\nWARNING: 0 cycles executed — the CPU hit BRK ($00) at the "
+            "reset vector address.\n"
+            "  Possible causes:\n"
+            "  1. Binary was compiled without vector table "
+            "(rebuild compiler and recompile)\n"
+            "  2. Wrong --base address (use --base 0x0000 with --fill, "
+            "or --base <text_base> without)\n"
+            "  3. Corrupt or truncated binary",
+            file=sys.stderr,
+        )
 
     # Dump memory ranges
     for mem_spec in args.mem:
