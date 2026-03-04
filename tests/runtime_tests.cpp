@@ -318,6 +318,130 @@ TEST_F(FunctionCallLangTest, TwoSequentialCalls) {
 }
 
 // ============================================================================
+// FUNCTION PARAMETER PASSING
+// ============================================================================
+
+class FunctionParamTest : public RuntimeTestBase {};
+
+TEST_F(FunctionParamTest, U8_ParamPassedCorrectly) {
+    // Nixie:
+    //   var result: u8 = 0
+    //   fn store_val(v: u8) { result = v }
+    //   fn main() { store_val(42) }
+    //
+    // After execution: result should be 42
+    std::vector<std::unique_ptr<Node>> nodes;
+    nodes.push_back(makeVariable("result", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
+
+    // Forward-declare so main can call it
+    nodes.push_back(makeFunctionDecl("store_val", {{"v", AstType{TypeKind::UNSIGNED_8}}}));
+
+    // main calls store_val(42)
+    std::vector<std::unique_ptr<Node>> mainBody;
+    {
+        std::vector<std::unique_ptr<Node>> args;
+        args.push_back(makeNumber(42));
+        mainBody.push_back(makeCall("store_val", std::move(args)));
+    }
+    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
+
+    // fn store_val(v: u8) { result = v }
+    std::vector<std::unique_ptr<Node>> storeBody;
+    storeBody.push_back(makeAssign(makeRef("result"), makeRef("v")));
+    nodes.push_back(makeFunction("store_val", {{"v", AstType{TypeKind::UNSIGNED_8}}}, std::move(storeBody)));
+
+    auto binary = compileAndLink(nodes);
+    ASSERT_FALSE(binary.empty());
+    run();
+
+    EXPECT_EQ(readMem(0x0200), 42) << "result should be 42 (passed via function parameter)";
+}
+
+TEST_F(FunctionParamTest, PutcharWritesToMemory) {
+    // Mirrors test.nxe: putchar writes a u8 parameter to a global variable.
+    // Nixie:
+    //   var output: u8 = 0
+    //   fn putchar(c: u8) { output = c }
+    //   fn main() { putchar(0x48) }   // 'H' = 0x48
+    //
+    // After execution: output should be 0x48
+    std::vector<std::unique_ptr<Node>> nodes;
+    nodes.push_back(makeVariable("output", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
+
+    nodes.push_back(makeFunctionDecl("putchar", {{"c", AstType{TypeKind::UNSIGNED_8}}}));
+
+    std::vector<std::unique_ptr<Node>> mainBody;
+    {
+        std::vector<std::unique_ptr<Node>> args;
+        args.push_back(makeNumber('H'));
+        mainBody.push_back(makeCall("putchar", std::move(args)));
+    }
+    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
+
+    std::vector<std::unique_ptr<Node>> putcharBody;
+    putcharBody.push_back(makeAssign(makeRef("output"), makeRef("c")));
+    nodes.push_back(makeFunction("putchar", {{"c", AstType{TypeKind::UNSIGNED_8}}}, std::move(putcharBody)));
+
+    auto binary = compileAndLink(nodes);
+    ASSERT_FALSE(binary.empty());
+    run();
+
+    EXPECT_EQ(readMem(0x0200), 'H') << "output should be 'H' (0x48) after putchar('H')";
+}
+
+TEST_F(FunctionParamTest, RepeatedCallsNoStackOverflow) {
+    // Verifies caller-side stack cleanup: calling a function with parameters
+    // in a loop should not overflow the stack.
+    //
+    // Nixie:
+    //   var counter: u8 = 3
+    //   var output: u8 = 0
+    //   fn store_val(v: u8) { output = v }
+    //   fn main() {
+    //       while (counter != 0) {
+    //           store_val(counter)
+    //           counter = counter - 1
+    //       }
+    //   }
+    //
+    // After execution: counter=0, output=1 (last value stored before reaching 0)
+    std::vector<std::unique_ptr<Node>> nodes;
+    nodes.push_back(makeVariable("counter", AstType{TypeKind::UNSIGNED_8}, makeNumber(3)));
+    nodes.push_back(makeVariable("output", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
+
+    nodes.push_back(makeFunctionDecl("store_val", {{"v", AstType{TypeKind::UNSIGNED_8}}}));
+
+    std::vector<std::unique_ptr<Node>> loopBody;
+    {
+        std::vector<std::unique_ptr<Node>> args;
+        args.push_back(makeRef("counter"));
+        loopBody.push_back(makeCall("store_val", std::move(args)));
+    }
+    loopBody.push_back(makeAssign(
+        makeRef("counter"),
+        makeBinary(Operator::SUBTRACT, makeRef("counter"), makeNumber(1))
+    ));
+
+    std::vector<std::unique_ptr<Node>> mainBody;
+    mainBody.push_back(makeWhile(
+        makeComp(Comparison::NOT_EQUAL, makeRef("counter"), makeNumber(0)),
+        std::move(loopBody)
+    ));
+    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
+
+    std::vector<std::unique_ptr<Node>> storeBody;
+    storeBody.push_back(makeAssign(makeRef("output"), makeRef("v")));
+    nodes.push_back(makeFunction("store_val", {{"v", AstType{TypeKind::UNSIGNED_8}}}, std::move(storeBody)));
+
+    auto binary = compileAndLink(nodes);
+    ASSERT_FALSE(binary.empty());
+    run();
+
+    EXPECT_EQ(readMem(0x0200), 0) << "counter should be 0 after loop";
+    EXPECT_EQ(readMem(0x0201), 1) << "output should be 1 (last call was store_val(1))";
+}
+
+// ============================================================================
 // INTERRUPT HANDLER (verifies RTI is emitted)
 // ============================================================================
 

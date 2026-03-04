@@ -1767,8 +1767,8 @@ void CodegenVisitor::visit(FunctionNode &node)
             emitPrologue(frameSize);
             
             // Declare parameters as stack variables
-            // Parameters are pushed right-to-left, so first param is closest to FP
-            int32_t paramOffset = 4; // Skip saved FP (2) + return addr (2)
+            // Stack layout from FP upward: [empty SP slot](1) + [saved FP](2) + [ret addr](2) = 5
+            int32_t paramOffset = 5;
             for (const auto& [paramName, paramType] : node.parameters) {
                 size_t paramSize = getSizeOfType(paramType);
                 SymbolInfo paramSym{std::string(paramName), paramType, StorageClass::Stack, paramOffset, false, false, paramSize};
@@ -1932,93 +1932,123 @@ void CodegenVisitor::visit(ReferenceNode &node)
         switch (symbol.storage)
         {
         case StorageClass::Stack: {
-            if (typeSize == 1) {
-                auto temp = getZeroPageAllocation("__temporary").value().address;
-                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
-                auto fp = getZeroPageAllocation("__frame_pointer").value().address;
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            auto fp = getZeroPageAllocation("__frame_pointer").value().address;
 
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::SEC);
-                
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(symbol.offset & 0xFF);
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp+1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            if (symbol.offset >= 0) {
+                // Parameter — positive offset from FP, use (FP),Y
+                if (typeSize == 1) {
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(static_cast<uint8_t>(symbol.offset));
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                } else if (typeSize == 2) {
+                    // Load low byte
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(static_cast<uint8_t>(symbol.offset));
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::PHA);
 
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(0x00);
+                    // Load high byte into A, transfer to X
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(static_cast<uint8_t>(symbol.offset + 1));
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::TAX);
 
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2 + 1);                       // temp2+1 is second byte of temp2 (zp address)
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
-
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
-                emit(temp2);
-
-            } else if (typeSize == 2) {
-                auto temp = getZeroPageAllocation("__temporary").value().address;
-                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
-                auto fp = getZeroPageAllocation("__frame_pointer").value().address;
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::SEC);
-                
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(symbol.offset & 0xFF);
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp+1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(0x00);
-
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2 + 1);                       // temp2+1 is second byte of temp2 (zp address)
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
-
-                emitOp(Opcodes::LDY_IMMEDIATE);
-
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                emitOp(Opcodes::PHA);
-
-                emitOp(Opcodes::LDY_IMMEDIATE);
-                emit(0x01);
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                emitOp(Opcodes::TAX);
-
-                emitOp(Opcodes::PLA);
+                    // Restore low byte to A
+                    emitOp(Opcodes::PLA);
+                } else {
+                    throw std::runtime_error("Multi-byte stack variables > 16 bits not yet supported");
+                }
             } else {
-                throw std::runtime_error("Multi-byte stack variables > 16 bits not yet supported");
+                // Local variable — negative offset, compute FP - |offset| into temp
+                auto temp = getZeroPageAllocation("__temporary").value().address;
+                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
+
+                if (typeSize == 1) {
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SEC);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(static_cast<uint8_t>((-symbol.offset) & 0xFF));
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp+1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(0x00);
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2 + 1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
+                    emit(temp2);
+
+                } else if (typeSize == 2) {
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SEC);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(static_cast<uint8_t>((-symbol.offset) & 0xFF));
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp+1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(0x00);
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2 + 1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::PHA);
+
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(0x01);
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::TAX);
+
+                    emitOp(Opcodes::PLA);
+                } else {
+                    throw std::runtime_error("Multi-byte stack variables > 16 bits not yet supported");
+                }
             }
             break;
         }
@@ -2086,10 +2116,12 @@ void CodegenVisitor::visit(CallNode &node)
         throw std::runtime_error("Undeclared function: " + std::string(node.name));
     }
 
+    size_t totalArgSize = 0;
     for (auto&& param : node.parameters) {
         param->accept(*this);
         loadIntoRegister(evalStack.top());
         pushRegister(evalStack.top().type);
+        totalArgSize += getSizeOfType(evalStack.top().type);
         evalStack.pop();
     }
 
@@ -2102,6 +2134,11 @@ void CodegenVisitor::visit(CallNode &node)
         emitOp(Opcodes::JSR);
         emitWord(static_cast<uint16_t>(funcSymOpt->offset));
         addTextReloc(RelocationType::WORD, SegmentID::TEXT);
+    }
+
+    // Caller-side stack cleanup: discard pushed arguments
+    for (size_t i = 0; i < totalArgSize; ++i) {
+        emitOp(Opcodes::PLA);
     }
 
 }
