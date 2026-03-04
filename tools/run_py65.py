@@ -80,12 +80,25 @@ def main():
         if base + i < 0x10000:
             mpu.memory[base + i] = byte
 
-    # Set reset vector (use --reset if provided, otherwise default to --base)
-    reset_addr = args.reset if args.reset is not None else base
-    mpu.memory[0xFFFC] = reset_addr & 0xFF
-    mpu.memory[0xFFFD] = (reset_addr >> 8) & 0xFF
+    # Set reset vector:
+    # - If --reset is explicitly provided, always use that value.
+    # - If the binary already covers 0xFFFC-0xFFFD and those bytes are
+    #   non-zero, assume they contain a valid reset vector and leave them.
+    # - Otherwise, fall back to --base.
+    if args.reset is not None:
+        reset_addr = args.reset
+        mpu.memory[0xFFFC] = reset_addr & 0xFF
+        mpu.memory[0xFFFD] = (reset_addr >> 8) & 0xFF
+    else:
+        vec_lo = mpu.memory[0xFFFC]
+        vec_hi = mpu.memory[0xFFFD]
+        if vec_lo == 0 and vec_hi == 0:
+            reset_addr = base
+            mpu.memory[0xFFFC] = reset_addr & 0xFF
+            mpu.memory[0xFFFD] = (reset_addr >> 8) & 0xFF
 
-    # Reset CPU
+    # Reset CPU — use the reset vector in memory (0xFFFC-0xFFFD)
+    mpu.start_pc = None
     mpu.reset()
 
     # Execute until BRK or max cycles
