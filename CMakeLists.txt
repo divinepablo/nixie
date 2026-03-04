@@ -28,13 +28,13 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE include src/include)
 
-add_executable(nixie-ld src/linker/linker.cpp src/linker/main.cpp)
-target_include_directories(nixie-ld PRIVATE include src/compiler)
-target_include_directories(nixie-ld INTERFACE include src/include)
+add_executable(${PROJECT_NAME}-ld src/linker/linker.cpp src/linker/main.cpp)
+target_include_directories(${PROJECT_NAME}-ld PRIVATE include src/compiler)
+target_include_directories(${PROJECT_NAME}-ld INTERFACE include src/include)
 
 # Linker library target for tests (without main)
-add_library(nixie-ld-lib STATIC src/linker/linker.cpp)
-target_include_directories(nixie-ld-lib PUBLIC include src/compiler src/include)
+add_library(${PROJECT_NAME}-ld-lib STATIC src/linker/linker.cpp)
+target_include_directories(${PROJECT_NAME}-ld-lib PUBLIC include src/compiler src/include)
 
 include(CTest)
 enable_testing()
@@ -95,7 +95,7 @@ if(MSVC)
 else()
   target_compile_options(linker_tests PRIVATE -Wno-error)
 endif()
-target_link_libraries(linker_tests PRIVATE GTest::gtest_main nixie-ld-lib)
+target_link_libraries(linker_tests PRIVATE GTest::gtest_main ${PROJECT_NAME}-ld-lib)
 gtest_discover_tests(linker_tests)
 
 # Runtime emulation tests (vrEmu6502)
@@ -111,7 +111,7 @@ if(MSVC)
 else()
   target_compile_options(runtime_tests PRIVATE -Wno-error)
 endif()
-target_link_libraries(runtime_tests PRIVATE GTest::gtest_main nixie-ld-lib vrEmu6502)
+target_link_libraries(runtime_tests PRIVATE GTest::gtest_main ${PROJECT_NAME}-ld-lib vrEmu6502)
 gtest_discover_tests(runtime_tests)
 
 # Optional py65 integration tests
@@ -123,4 +123,7 @@ if(Python3_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/tools/run_py65.py")
 endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+                                                 "${CMAKE_BINARY_DIR}/bin")
+
+set_target_properties(${PROJECT_NAME}-ld PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                                                  "${CMAKE_BINARY_DIR}/bin")
