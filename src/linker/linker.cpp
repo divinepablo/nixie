@@ -203,7 +203,8 @@ std::vector<uint8_t> Linker::link()
 
     // Fix parent pointers for resolved undefined references so they
     // point at the actual ObjectFiles in object_files (which now have
-    // their new base addresses assigned).
+    // their new base addresses assigned).  Also update the resolved
+    // value in case the symbol was re-injected with a new value.
     for (auto& obj : object_files) {
         for (auto& undef : obj.undefined_references) {
             if (undef.resolved) {
@@ -211,6 +212,8 @@ std::vector<uint8_t> Linker::link()
                     for (auto& exp : candidate.exported_globals) {
                         if (exp.name == undef.resolved->name) {
                             undef.resolved->parent = &candidate;
+                            undef.resolved->value = exp.value;
+                            undef.resolved->segment = exp.segment;
                         }
                     }
                 }
@@ -232,6 +235,12 @@ std::vector<uint8_t> Linker::link()
         {
             full_data.push_back(i);
         }
+    }
+
+    // Write relocated data segment into ROM immediately after text
+    uint16_t data_offset = data_rom_address - this->config.text_base;
+    for (size_t i = 0; i < full_data.size(); ++i) {
+        final_rom[data_offset + i] = full_data[i];
     }
 
     if (this->config.fill && this->config.text_base > 0) {
