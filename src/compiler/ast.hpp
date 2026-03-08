@@ -75,8 +75,12 @@ struct AstType {
     unsigned int pointerLevel = 0; // 0 = not a pointer, 1 = T*, 2 = T**, ...
 
     // Helpers to make creation easier
-    static constexpr AstType Primitive(const TypeKind k, unsigned int ptr = 0) { return { k, "", ptr }; }
-    static constexpr AstType Struct(std::string_view n, unsigned int ptr = 0) { return { TypeKind::STRUCTURE, n, ptr }; }
+    constexpr AstType() : kind(TypeKind::UNKNOWN), name("") {}
+    constexpr AstType(TypeKind k, std::string_view n = "", unsigned int ptr = 0) : kind(k), name(n), pointerLevel(ptr) {}
+
+
+    static constexpr AstType Primitive(const TypeKind k, unsigned int ptr = 0) { return AstType(k, "", ptr); }
+    static constexpr AstType Struct(std::string_view n, unsigned int ptr = 0) { return AstType(TypeKind::STRUCTURE, n, ptr); }
     static constexpr AstType PointerTo(const AstType& base, unsigned int levels = 1) {
         AstType t = base;
         t.pointerLevel += levels;

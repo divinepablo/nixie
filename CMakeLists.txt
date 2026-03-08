@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.15)
 project(
   nixie
   VERSION 0.1.0
-  LANGUAGES CXX)
+  LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,13 +28,13 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE include src/include)
 
-add_executable(nixie-ld src/linker/linker.cpp src/linker/main.cpp)
-target_include_directories(nixie-ld PRIVATE include src/compiler)
-target_include_directories(nixie-ld INTERFACE include src/include)
+add_executable(${PROJECT_NAME}-ld src/linker/linker.cpp src/linker/main.cpp)
+target_include_directories(${PROJECT_NAME}-ld PRIVATE include src/compiler)
+target_include_directories(${PROJECT_NAME}-ld INTERFACE include src/include)
 
 # Linker library target for tests (without main)
-add_library(nixie-ld-lib STATIC src/linker/linker.cpp)
-target_include_directories(nixie-ld-lib PUBLIC include src/compiler src/include)
+add_library(${PROJECT_NAME}-ld-lib STATIC src/linker/linker.cpp)
+target_include_directories(${PROJECT_NAME}-ld-lib PUBLIC include src/compiler src/include)
 
 include(CTest)
 enable_testing()
@@ -52,6 +52,15 @@ set(gtest_force_shared_crt
     ON
     CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
+
+FetchContent_Declare(
+  vrEmu6502
+  GIT_REPOSITORY https://github.com/visrealm/vrEmu6502.git
+  GIT_TAG aae98cb14386d832cb7357c99626520b6590bc24
+)
+
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(vrEmu6502)
 
 add_executable(compiler_tests
     tests/lexer_tests.cpp
@@ -86,8 +95,35 @@ if(MSVC)
 else()
   target_compile_options(linker_tests PRIVATE -Wno-error)
 endif()
-target_link_libraries(linker_tests PRIVATE GTest::gtest_main nixie-ld-lib)
+target_link_libraries(linker_tests PRIVATE GTest::gtest_main ${PROJECT_NAME}-ld-lib)
 gtest_discover_tests(linker_tests)
 
+# Runtime emulation tests (vrEmu6502)
+add_executable(runtime_tests
+    tests/runtime_tests.cpp
+    src/compiler/lexer.cpp
+    src/compiler/parser.cpp
+    src/compiler/codegen.cpp
+)
+target_include_directories(runtime_tests PRIVATE include src src/include src/compiler ${vremu6502_SOURCE_DIR}/src)
+if(MSVC)
+  target_compile_options(runtime_tests PRIVATE /WX-)
+else()
+  target_compile_options(runtime_tests PRIVATE -Wno-error)
+endif()
+target_link_libraries(runtime_tests PRIVATE GTest::gtest_main ${PROJECT_NAME}-ld-lib vrEmu6502)
+gtest_discover_tests(runtime_tests)
+
+# Optional py65 integration tests
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/tools/run_py65.py")
+  add_test(NAME py65_smoke
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/run_py65.py --help
+  )
+endif()
+
 set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+                                                 "${CMAKE_BINARY_DIR}/bin")
+
+set_target_properties(${PROJECT_NAME}-ld PROPERTIES RUNTIME_OUTPUT_DIRECTORY
                                                  "${CMAKE_BINARY_DIR}/bin")

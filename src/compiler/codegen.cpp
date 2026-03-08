@@ -971,22 +971,11 @@ void CodegenVisitor::popRegister(const AstType &type)
     if (size == 1) {
         emitOp(Opcodes::PLA);
     } else if (size == 2) {
-        emitOp(Opcodes::PLA);
-        emitOp(Opcodes::PLX);
+        emitOp(Opcodes::PLX);  // Pop high byte (was pushed last by PHX)
+        emitOp(Opcodes::PLA);  // Pop low byte (was pushed first by PHA)
     } else {
         throw std::runtime_error("Push of types larger than 16-bit not yet supported");
     }
-}
-
-void CodegenVisitor::emitStackAdjust(size_t n)
-{
-    // Discard n bytes from the hardware stack by adjusting SP upward.
-    // Uses TSX / INX×n / TXS (simple and correct; performance is secondary).
-    emitOp(Opcodes::TSX);
-    for (size_t i = 0; i < n; ++i) {
-        emitOp(Opcodes::INX);
-    }
-    emitOp(Opcodes::TXS);
 }
 
 void CodegenVisitor::emitConditionalBranch(uint8_t opcode, size_t labelId)
@@ -1212,6 +1201,11 @@ void CodegenVisitor::visit(UnaryNode &node)
         // so it can be used for both reading and writing
         // The result type needs to have its pointer level decremented
         AstType dereferenced = result.type.decayPointer();
+        
+        // STRING is an implicit pointer to byte data; dereferencing yields u8
+        if (dereferenced.kind == TypeKind::STRING && dereferenced.pointerLevel == 0) {
+            dereferenced = AstType::Primitive(TypeKind::UNSIGNED_8);
+        }
         
         auto temp = getZeroPageAllocation("__temporary_2p").value().address;
         
@@ -1628,12 +1622,15 @@ void CodegenVisitor::visit(ComparisonNode &node)
     }
     emitOp(Opcodes::LDA_IMMEDIATE);
     emit(0x1);
+    auto cmp_done = createLabel("cmp_done");
+    emitJump(Opcodes::BRA, cmp_done);
     emitLabel(not_is_a_keyword);
     if (is16BitArith) {
         emitOp(Opcodes::TAX);
     }
     emitOp(Opcodes::LDA_IMMEDIATE);
     emit(0x0);
+    emitLabel(cmp_done);
     evalStack.push(EvaluationResult{ValueLocation::Accumulator, 0, leftResult.type});
 }
 
@@ -1650,14 +1647,17 @@ void CodegenVisitor::visit(FunctionNode &node)
         switch (node.interruptType) {
             case InterruptType::NMI:
                 nmiHandler = name;
+                addVectorTable = true;
                 exportedGlobals.push_back(std::make_pair("_nmi_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::RESET:
                 resetHandler = name;
+                addVectorTable = true;
                 exportedGlobals.push_back(std::make_pair("_reset_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::IRQ:
                 irqHandler = name;
+                addVectorTable = true;
                 exportedGlobals.push_back(std::make_pair("_irq_handler", static_cast<int32_t>(textSegment.size())));
                 break;
             case InterruptType::NONE:
@@ -1770,8 +1770,8 @@ void CodegenVisitor::visit(FunctionNode &node)
             emitPrologue(frameSize);
             
             // Declare parameters as stack variables
-            // Parameters are pushed right-to-left, so first param is closest to FP
-            int32_t paramOffset = 4; // Skip saved FP (2) + return addr (2)
+            // Stack layout from FP upward: [empty SP slot](1) + [saved FP](2) + [ret addr](2) = 5
+            int32_t paramOffset = 5;
             for (const auto& [paramName, paramType] : node.parameters) {
                 size_t paramSize = getSizeOfType(paramType);
                 SymbolInfo paramSym{std::string(paramName), paramType, StorageClass::Stack, paramOffset, false, false, paramSize};
@@ -1868,15 +1868,20 @@ void CodegenVisitor::visit(StructureInitNode &node)
 void CodegenVisitor::visit(VariableNode &node)
 {
     bool isLocal = scopes.size() > 1;
-    declareVariable(std::string(node.name), node.type, (isLocal ? StorageClass::Stack : node.zeropaged ? StorageClass::ZeroPage : StorageClass::Global), getSizeOfType(node.type));
     
     if (!isLocal) {
         if (node.value.get() != nullptr) {
+            // Evaluate initializer BEFORE declaring the variable so that
+            // side-effects like getString() (which emits string data to the
+            // data segment) happen first.  This way declareVariable sees the
+            // correct data segment size and assigns the right offset.
             node.value->accept(*this);
             auto result = evalStack.top(); evalStack.pop();
             if (result.location == ValueLocation::Accumulator || result.location == ValueLocation::DereferencedPointer) {
                 throw std::runtime_error("Non-constant value assigned to variable initialization");
             }
+
+            declareVariable(std::string(node.name), node.type, (node.zeropaged ? StorageClass::ZeroPage : StorageClass::Global), getSizeOfType(node.type));
 
             if (getSizeOfType(result.type) > getSizeOfType(node.type)) {
                 throw std::runtime_error("Type size mismatch in variable initialization");
@@ -1895,6 +1900,7 @@ void CodegenVisitor::visit(VariableNode &node)
             }
             
         } else {
+            declareVariable(std::string(node.name), node.type, (node.zeropaged ? StorageClass::ZeroPage : StorageClass::Global), getSizeOfType(node.type));
             // Default initialize to zero
             size_t typeSize = getSizeOfType(node.type);
             for (size_t i = 0; i < typeSize; ++i) {
@@ -1902,6 +1908,7 @@ void CodegenVisitor::visit(VariableNode &node)
             }
         }
     } else {
+        declareVariable(std::string(node.name), node.type, StorageClass::Stack, getSizeOfType(node.type));
         if (node.value.get() != nullptr) {
             node.value->accept(*this);
             auto result = evalStack.top(); evalStack.pop();
@@ -1928,93 +1935,124 @@ void CodegenVisitor::visit(ReferenceNode &node)
         switch (symbol.storage)
         {
         case StorageClass::Stack: {
-            if (typeSize == 1) {
-                auto temp = getZeroPageAllocation("__temporary").value().address;
-                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
-                auto fp = getZeroPageAllocation("__frame_pointer").value().address;
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            auto fp = getZeroPageAllocation("__frame_pointer").value().address;
 
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::SEC);
-                
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(symbol.offset & 0xFF);
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp+1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+            if (symbol.offset >= 0) {
+                // Parameter — positive offset from FP, use (FP),Y
+                if (typeSize == 1) {
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(static_cast<uint8_t>(symbol.offset));
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                } else if (typeSize == 2) {
+                    // Load low byte
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(static_cast<uint8_t>(symbol.offset));
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::PHA);
 
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(0x00);
+                    // Load high byte into A, transfer to X
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(static_cast<uint8_t>(symbol.offset + 1));
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::TAX);
 
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2 + 1);                       // temp2+1 is second byte of temp2 (zp address)
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
-
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
-                emit(temp2);
-
-            } else if (typeSize == 2) {
-                auto temp = getZeroPageAllocation("__temporary").value().address;
-                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
-                auto fp = getZeroPageAllocation("__frame_pointer").value().address;
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::SEC);
-                
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(symbol.offset & 0xFF);
-                
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                
-                emitOp(Opcodes::LDA_ZEROPAGE);
-                emit(fp+1);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                emitOp(Opcodes::SBC_IMMEDIATE);
-                emit(0x00);
-
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2 + 1);                       // temp2+1 is second byte of temp2 (zp address)
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
-
-                emitOp(Opcodes::LDY_IMMEDIATE);
-
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                emitOp(Opcodes::PHA);
-
-                emitOp(Opcodes::LDY_IMMEDIATE);
-                emit(0x01);
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                emitOp(Opcodes::TAX);
-
-                emitOp(Opcodes::PLA);
+                    // Restore low byte to A
+                    emitOp(Opcodes::PLA);
+                } else {
+                    throw std::runtime_error("Multi-byte stack variables > 16 bits not yet supported");
+                }
             } else {
-                throw std::runtime_error("Multi-byte stack variables > 16 bits not yet supported");
+                // Local variable — negative offset, compute FP - |offset| into temp
+                auto temp = getZeroPageAllocation("__temporary").value().address;
+                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
+
+                if (typeSize == 1) {
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SEC);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(static_cast<uint8_t>((-symbol.offset) & 0xFF));
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp+1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(0x00);
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2 + 1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
+                    emit(temp2);
+
+                } else if (typeSize == 2) {
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SEC);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(static_cast<uint8_t>((-symbol.offset) & 0xFF));
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE);
+                    emit(fp+1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::SBC_IMMEDIATE);
+                    emit(0x00);
+
+                    emitOp(Opcodes::STA_ZEROPAGE);
+                    emit(temp2 + 1);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(0x00);
+
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+                    emitOp(Opcodes::PHA);
+
+                    emitOp(Opcodes::LDY_IMMEDIATE);
+                    emit(0x01);
+                    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+                    emit(temp2);
+                    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+                    emitOp(Opcodes::TAX);
+
+                    emitOp(Opcodes::PLA);
+                } else {
+                    throw std::runtime_error("Multi-byte stack variables > 16 bits not yet supported");
+                }
             }
             break;
         }
@@ -2082,15 +2120,12 @@ void CodegenVisitor::visit(CallNode &node)
         throw std::runtime_error("Undeclared function: " + std::string(node.name));
     }
 
-    // Calling convention: push arguments right-to-left so that the first
-    // declared parameter lands closest to the return address / frame pointer
-    // after the callee's prologue.  Track total pushed bytes for cleanup.
-    size_t totalArgBytes = 0;
-    for (size_t i = node.parameters.size(); i-- > 0;) {
-        node.parameters[i]->accept(*this);
+    size_t totalArgSize = 0;
+    for (auto&& param : node.parameters) {
+        param->accept(*this);
         loadIntoRegister(evalStack.top());
-        totalArgBytes += getSizeOfType(evalStack.top().type);
         pushRegister(evalStack.top().type);
+        totalArgSize += getSizeOfType(evalStack.top().type);
         evalStack.pop();
     }
 
@@ -2105,10 +2140,9 @@ void CodegenVisitor::visit(CallNode &node)
         addTextReloc(RelocationType::WORD, SegmentID::TEXT);
     }
 
-    // Caller-side stack cleanup: discard the argument bytes pushed before the
-    // call so the hardware stack is balanced when execution continues.
-    if (totalArgBytes > 0) {
-        emitStackAdjust(totalArgBytes);
+    // Caller-side stack cleanup: discard pushed arguments
+    for (size_t i = 0; i < totalArgSize; ++i) {
+        emitOp(Opcodes::PLA);
     }
 
 }
