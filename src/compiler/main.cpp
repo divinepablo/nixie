@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
         CodegenVisitor codegen;
         parsed->accept(codegen);
 
-        codegen.addVectorTable = codegen.addVectorTable || vector_table;
+        codegen.addVectorTable = vector_table;
 
         // 5. Output binary
         auto binary = codegen.generateO65();
