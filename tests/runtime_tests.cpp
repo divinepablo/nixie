@@ -555,6 +555,83 @@ TEST_F(FunctionParamTest, PrintStringThroughPointer) {
         << "count should be 2 after print(\"AB\")";
 }
 
+TEST_F(FunctionParamTest, StringPassedToFunction) {
+    // Verify that a STRING variable is properly passed as a function parameter.
+    // A callee receives the string pointer (as ptr[u8]), iterates it, and
+    // counts the string length — proving the string address arrives correctly
+    // on the callee's stack.
+    //
+    // Mirrors the pattern from test.nxe / PrintStringThroughPointer but
+    // focuses on counting the string length rather than printing characters.
+    //
+    // Nixie (conceptual):
+    //   var output: ptr[u8] = 0x0300   // output address (just for layout)
+    //   var msg: str = "Hello"
+    //   var count: u8 = 0
+    //   fn strlen(s: ptr[u8]) {
+    //       while (@s != 0) {
+    //           count = count + 1
+    //           s = s + 1
+    //       }
+    //   }
+    //   fn main() { strlen(msg) }
+    //
+    // After execution: count should be 5
+
+    std::vector<std::unique_ptr<Node>> nodes;
+    nodes.push_back(makeVariable("output",
+        AstType::Primitive(TypeKind::UNSIGNED_8, 1),
+        makeNumber(0x0300)));
+    nodes.push_back(makeVariable("msg", AstType{TypeKind::STRING}, makeString("Hello")));
+    nodes.push_back(makeVariable("count", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
+
+    // Forward declaration so main can call strlen
+    nodes.push_back(makeFunctionDecl("strlen", {{"s", AstType::Primitive(TypeKind::UNSIGNED_8, 1)}}));
+
+    // fn main() { strlen(msg) }
+    std::vector<std::unique_ptr<Node>> mainBody;
+    {
+        std::vector<std::unique_ptr<Node>> args;
+        args.push_back(makeRef("msg"));
+        mainBody.push_back(makeCall("strlen", std::move(args)));
+    }
+    nodes.push_back(makeFunction("main", {}, std::move(mainBody)));
+
+    // fn strlen(s: ptr[u8]) {
+    //     while (@s != 0) { count = count + 1; s = s + 1 }
+    // }
+    std::vector<std::unique_ptr<Node>> loopBody;
+    // count = count + 1
+    loopBody.push_back(makeAssign(
+        makeRef("count"),
+        makeBinary(Operator::ADD, makeRef("count"), makeNumber(1))
+    ));
+    // s = s + 1  (advance pointer)
+    loopBody.push_back(makeAssign(
+        makeRef("s"),
+        makeBinary(Operator::ADD, makeRef("s"), makeNumber(1))
+    ));
+
+    std::vector<std::unique_ptr<Node>> strlenBody;
+    strlenBody.push_back(makeWhile(
+        makeComp(Comparison::NOT_EQUAL,
+                 makeUnary(UnaryOperator::DEREFERENCE, makeRef("s")),
+                 makeNumber(0)),
+        std::move(loopBody)
+    ));
+    nodes.push_back(makeFunction("strlen", {{"s", AstType::Primitive(TypeKind::UNSIGNED_8, 1)}}, std::move(strlenBody)));
+
+    auto binary = compileAndLink(nodes);
+    ASSERT_FALSE(binary.empty());
+    run();
+
+    // Data layout: output(2) + "Hello\0"(6) + msg_ptr(2) + count(1) = 11 bytes
+    // count at offset 10 → $020A
+    uint16_t countAddr = 0x020A;
+    EXPECT_EQ(readMem(countAddr), 5)
+        << "count should be 5 after strlen(\"Hello\")";
+}
+
 // ============================================================================
 // INTERRUPT HANDLER (verifies RTI is emitted)
 // ============================================================================
