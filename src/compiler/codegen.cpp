@@ -929,9 +929,9 @@ void CodegenVisitor::loadIntoRegister(const EvaluationResult &source)
             uint8_t zpAddr = static_cast<uint8_t>(source.value & 0xFF);
             
             // Load through indirect addressing: LDA (zp),Y with Y=0
-            emitOp(Opcodes::LDY_IMMEDIATE);
-            emit(0x00);
-            emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+            // emitOp(Opcodes::LDY_IMMEDIATE);
+            // emit(0x00);
+            emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT);
             emit(zpAddr);
             addTextReloc(RelocationType::LOW, SegmentID::ZERO);
             

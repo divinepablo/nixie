@@ -8,8 +8,9 @@ fn putchar(c: u8) {
 
 // Print a null-terminated string
 fn print(p: ptr[u8]) {
-    while (@p) {
-        putchar(@p);
+    while (@p != 0) {
+        // putchar(c); // unoptimized version, due to function call overhead
+        @chrout = @p;
         p = p + 1;
     }
 }

@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include "codegen.hpp"
+#include "ast_printer.hpp"
 #include <argparse.hpp>
 
 std::string read_file(const std::string& filename) {
@@ -57,8 +58,8 @@ int main(int argc, char* argv[]) {
 
     std::string filename = program.get<std::string>("filename");
     std::string output = program.get<std::string>("--output");
-    // bool emit_tokens = program.get<bool>("--emit-tokens");
-    // bool emit_ast = program.get<bool>("--emit-ast");
+    bool emit_tokens = program.get<bool>("--emit-tokens");
+    bool emit_ast = program.get<bool>("--emit-ast");
     bool vector_table = program.get<bool>("--vector-table");
     // if (argc < 2) {
     //     std::cerr << "Usage: nixie [filename]\n";
@@ -66,7 +67,7 @@ int main(int argc, char* argv[]) {
     // }
 
     try {
-        std::cout << "Compiling " << filename << "...\n";
+        // std::cout << "Compiling " << filename << "...\n";
         // 1. Read file (This string MUST stay in scope)
         std::string source_code = read_file(filename);
 
@@ -74,7 +75,7 @@ int main(int argc, char* argv[]) {
         Lexer lexer(source_code);
         auto tokens = lexer.tokenize();
         // 3. Print tokens
-        if (program.get<bool>("--emit-tokens")) {
+        if (emit_tokens) {
             for (const auto& token : tokens) {
                 std::cout << "Token(Type: " << static_cast<int>(token.type)
                           << ", Value: \"" << token.value << "\")\n";
@@ -82,6 +83,11 @@ int main(int argc, char* argv[]) {
         }
         Parser parser(tokens);
         auto parsed = parser.parse();
+
+        if (emit_ast) {
+            AstPrinter printer;
+            parsed->accept(printer);
+        }
 
         // 4. Codegen
         CodegenVisitor codegen;
@@ -99,7 +105,7 @@ int main(int argc, char* argv[]) {
         out_filename += ".o65";
         std::ofstream outfile(out_filename, std::ios::binary);
         outfile.write(reinterpret_cast<const char*>(binary.data()), binary.size());
-        std::cout << "Compilation successful! Output written to " << out_filename << "\n";
+        // std::cout << "Compilation successful! Output written to " << out_filename << "\n";
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

@@ -1,3 +1,4 @@
+// !ignored
 // 1. Preprocessor Definitions & Imports
 #include "hardware/registers.nxi"
 

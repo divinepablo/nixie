@@ -42,22 +42,22 @@ int main(int argc, char* argv[]) {
 
     program.add_argument("--text")
         .scan<'i', uint16_t>()
-        .help("Set the base address for the .text segment (default: 0x0000)")
-        .default_value(static_cast<uint16_t>(0x0000));
+        .help("Set the base address for the .text segment")
+        .default_value(static_cast<uint16_t>(0x8000));
 
     program.add_argument("--data")
         .scan<'i', uint16_t>()
-        .help("Set the base address for the .data segment (default: 0x0000)")
-        .default_value(static_cast<uint16_t>(0x0000));
+        .help("Set the base address for the .data segment")
+        .default_value(static_cast<uint16_t>(0x0200));
 
     program.add_argument("--bss")
         .scan<'i', uint16_t>()
-        .help("Set the base address for the .bss segment (default: 0x0000)")
+        .help("Set the base address for the .bss segment")
         .default_value(static_cast<uint16_t>(0x0000));
 
     program.add_argument("--zero")
         .scan<'i', uint16_t>()
-        .help("Set the base address for the .zero segment (default: 0x0000)")
+        .help("Set the base address for the .zero segment")
         .default_value(static_cast<uint16_t>(0x0000));
 
     try {

@@ -2,7 +2,6 @@
 
 a language made to compile to 65c02 machine code
 
-### uh guys i dont know why its saying ac1dbitches is commiting i wrote everything 
 
 ## features
 
@@ -10,8 +9,7 @@ a language made to compile to 65c02 machine code
 * [x] variables
 * [ ] structures (like c structs)
 * [x] declaring variables as zero page variables
-* [ ] file importing
-* [ ] header files
+* [ ] header files/file importing
 * [ ] preprocessor definitions
 * [ ] first class functions
 * [x] declaring interrupts
@@ -35,3 +33,6 @@ To build the project, follow these steps:
    ```
 
 Make sure you have CMake installed on your system.
+
+### uh guys i dont know why its saying ac1dbitches is commiting i wrote everything 
+turns out it was a commit email issue, lesson learned do not put nonsense as commit email
