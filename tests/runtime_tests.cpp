@@ -740,3 +740,74 @@ TEST_F(StringIterationTest, PutsCopiesStringToBuffer) {
     // → $0200 + 7 = $0207
     EXPECT_EQ(readMem(0x0207), 2) << "count should be 2";
 }
+
+TEST_F(StringIterationTest, CopyStringToMemoryAndCalcSize) {
+    // Full string iteration test: copy "Hello World" to a memory section
+    // and compute the string length — validates pointer iteration, memcpy
+    // semantics, and size calculation through the compiler pipeline.
+    //
+    // Nixie (conceptual):
+    //   var src: string = "Hello World"
+    //   var dst: u16 = 0x0300
+    //   var size: u8 = 0
+    //   fn main() {
+    //       while (@src != 0) {
+    //           @dst = @src
+    //           src = src + 1
+    //           dst = dst + 1
+    //           size = size + 1
+    //       }
+    //   }
+
+    std::vector<std::unique_ptr<Node>> nodes;
+    nodes.push_back(makeVariable("src", AstType{TypeKind::STRING}, makeString("Hello World")));
+    nodes.push_back(makeVariable("dst", AstType{TypeKind::UNSIGNED_16}, makeNumber(0x0300)));
+    nodes.push_back(makeVariable("size", AstType{TypeKind::UNSIGNED_8}, makeNumber(0)));
+
+    std::vector<std::unique_ptr<Node>> loopBody;
+    // @dst = @src  — copy one byte
+    loopBody.push_back(makeAssign(
+        makeUnary(UnaryOperator::DEREFERENCE, makeRef("dst")),
+        makeUnary(UnaryOperator::DEREFERENCE, makeRef("src"))
+    ));
+    // src = src + 1
+    loopBody.push_back(makeAssign(
+        makeRef("src"),
+        makeBinary(Operator::ADD, makeRef("src"), makeNumber(1))
+    ));
+    // dst = dst + 1
+    loopBody.push_back(makeAssign(
+        makeRef("dst"),
+        makeBinary(Operator::ADD, makeRef("dst"), makeNumber(1))
+    ));
+    // size = size + 1
+    loopBody.push_back(makeAssign(
+        makeRef("size"),
+        makeBinary(Operator::ADD, makeRef("size"), makeNumber(1))
+    ));
+
+    std::vector<std::unique_ptr<Node>> body;
+    body.push_back(makeWhile(
+        makeComp(Comparison::NOT_EQUAL,
+                 makeUnary(UnaryOperator::DEREFERENCE, makeRef("src")),
+                 makeNumber(0)),
+        std::move(loopBody)
+    ));
+    nodes.push_back(makeFunction("main", {}, std::move(body)));
+
+    auto binary = compileAndLink(nodes);
+    ASSERT_FALSE(binary.empty());
+    run();
+
+    // Verify the entire string was copied to $0300
+    const char* expected = "Hello World";
+    for (size_t i = 0; i < 11; ++i) {
+        EXPECT_EQ(readMem(0x0300 + i), static_cast<uint8_t>(expected[i]))
+            << "Byte " << i << " of copied string should be '" << expected[i] << "'";
+    }
+
+    // size is at data offset: src(2) + "Hello World\0"(12) + dst(2) + size(1)
+    // → $0200 + 16 = $0210
+    uint16_t sizeAddr = 0x0210;
+    EXPECT_EQ(readMem(sizeAddr), 11) << "size should be 11 for 'Hello World'";
+}
