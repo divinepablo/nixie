@@ -29,25 +29,32 @@ std::vector<Token> Lexer::tokenize()
 {
     std::vector<Token> tokens;
 
+    size_t token_line = 1, token_col = 1;
+    auto push = [&](Type t, std::string_view v) {
+        tokens.push_back({t, v, token_line, token_col});
+    };
+
     while (true)
     {
         skip_whitespace_and_comments();
         if (is_eof())
             break;
 
+        token_line = line;
+        token_col = column;
         size_t start = cursor;
 
         if (std::isdigit(peek()))
         {
             if (source.substr(cursor).starts_with("0x"))
             {
-                cursor += 2;
+                cursor += 2; column += 2;
                 while (!is_eof() && std::isxdigit(peek()))
                     advance();
             }
             else if (source.substr(cursor).starts_with("0b"))
             {
-                cursor += 2;
+                cursor += 2; column += 2;
                 while (!is_eof() && (peek() == '0' || peek() == '1'))
                     advance();
             }
@@ -56,7 +63,7 @@ std::vector<Token> Lexer::tokenize()
                 while (!is_eof() && std::isdigit(peek()))
                     advance();
             }
-            tokens.push_back({Type::NUMBER, source.substr(start, cursor - start)});
+            push(Type::NUMBER, source.substr(start, cursor - start));
             continue;
         }
 
@@ -71,7 +78,7 @@ std::vector<Token> Lexer::tokenize()
             }
             const auto length = cursor - start - 1;
             std::string_view str = source.substr(start + 1, length);
-            tokens.push_back({Type::STRING, str});
+            push(Type::STRING, str);
             advance();
             continue;
         }
@@ -79,17 +86,17 @@ std::vector<Token> Lexer::tokenize()
         {
             if (source.substr(cursor).starts_with("#include"))
             {
-                cursor += 8;
-                tokens.push_back({Type::INCLUDE, "#include"});
+                cursor += 8; column += 8;
+                push(Type::INCLUDE, "#include");
                 continue;
             }
             else if (source.substr(cursor).starts_with("#define"))
             {
-                cursor += 7;
-                tokens.push_back({Type::DEFINE, "#define"});
+                cursor += 7; column += 7;
+                push(Type::DEFINE, "#define");
                 continue;
             }
-            tokens.push_back({Type::HASH, "#"});
+            push(Type::HASH, "#");
             advance();
             continue;
         }
@@ -105,7 +112,7 @@ std::vector<Token> Lexer::tokenize()
                 throw std::runtime_error("Unterminated character literal");
             }
             advance(); // skip closing '
-            tokens.push_back({Type::CHARACTER, source.substr(charStart, 1)});
+            push(Type::CHARACTER, source.substr(charStart, 1));
             continue;
         }
 
@@ -119,85 +126,91 @@ std::vector<Token> Lexer::tokenize()
             std::string_view word = source.substr(start, cursor - start);
 
             if (word == "struct")
-                tokens.push_back({Type::STRUCT, word});
+                push(Type::STRUCT, word);
             else if (word == "fn")
-                tokens.push_back({Type::FUNCTION, word});
+                push(Type::FUNCTION, word);
             else if (word == "var")
-                tokens.push_back({Type::VARIABLE, word});
+                push(Type::VARIABLE, word);
             else if (word == "if")
-                tokens.push_back({Type::IF, word});
+                push(Type::IF, word);
             else if (word == "else")
-                tokens.push_back({Type::ELSE, word});
+                push(Type::ELSE, word);
             else if (word == "while")
-                tokens.push_back({Type::WHILE, word});
+                push(Type::WHILE, word);
             else if (word == "const")
-                tokens.push_back({Type::CONSTANT, word});
+                push(Type::CONSTANT, word);
             else if (word == "__interrupt")
-                tokens.push_back({Type::INTERRUPT, word});
+                push(Type::INTERRUPT, word);
             else if (word == "__zeropage")
-                tokens.push_back({Type::ZEROPAGE, word});
+                push(Type::ZEROPAGE, word);
             else if (word == "nmi")
-                tokens.push_back({Type::NMI, word});
+                push(Type::NMI, word);
             else if (word == "irq")
-                tokens.push_back({Type::IRQ, word});
+                push(Type::IRQ, word);
             else if (word == "reset")
-                tokens.push_back({Type::RESET, word});
+                push(Type::RESET, word);
             else if (word == "u8")
-                tokens.push_back({Type::TYPE_UNSIGNED_8, word});
+                push(Type::TYPE_UNSIGNED_8, word);
             else if (word == "u16")
-                tokens.push_back({Type::TYPE_UNSIGNED_16, word});
+                push(Type::TYPE_UNSIGNED_16, word);
             else if (word == "u32")
-                tokens.push_back({Type::TYPE_UNSIGNED_32, word});
+                push(Type::TYPE_UNSIGNED_32, word);
             else if (word == "u64")
-                tokens.push_back({Type::TYPE_UNSIGNED_64, word});
+                push(Type::TYPE_UNSIGNED_64, word);
             else if (word == "i8")
-                tokens.push_back({Type::TYPE_SIGNED_8, word});
+                push(Type::TYPE_SIGNED_8, word);
             else if (word == "i16")
-                tokens.push_back({Type::TYPE_SIGNED_16, word});
+                push(Type::TYPE_SIGNED_16, word);
             else if (word == "i32")
-                tokens.push_back({Type::TYPE_SIGNED_32, word});
+                push(Type::TYPE_SIGNED_32, word);
             else if (word == "i64")
-                tokens.push_back({Type::TYPE_SIGNED_64, word});
+                push(Type::TYPE_SIGNED_64, word);
             else if (word == "bool")
-                tokens.push_back({Type::TYPE_BOOLEAN, word});
+                push(Type::TYPE_BOOLEAN, word);
             else if (word == "str")
-                tokens.push_back({Type::TYPE_STRING, word});
+                push(Type::TYPE_STRING, word);
             else if (word == "ptr")
-                tokens.push_back({Type::TYPE_PTR, word});
+                push(Type::TYPE_PTR, word);
             else if (word == "true")
-                tokens.push_back({Type::TRUE, word});
+                push(Type::TRUE, word);
             else if (word == "false")
-                tokens.push_back({Type::FALSE, word});
+                push(Type::FALSE, word);
             else if (word == "return")
-                tokens.push_back({Type::RETURN, word});
+                push(Type::RETURN, word);
             else
-                tokens.push_back({Type::IDENTIFIER, word});
+                push(Type::IDENTIFIER, word);
             continue;
         }
 
         std::string_view hi = source.substr(cursor);
         if (hi.starts_with("=="))
         {
-            tokens.push_back({Type::EQUALS, hi.substr(0, 2)}),
-                cursor += 2;
+            push(Type::EQUALS, hi.substr(0, 2));
+            cursor += 2; column += 2;
             continue;
         }
         else if (hi.starts_with(">="))
         {
-            tokens.push_back({Type::GREATER_THAN_EQUAL, hi.substr(0, 2)}),
-                cursor += 2;
+            push(Type::GREATER_THAN_EQUAL, hi.substr(0, 2));
+            cursor += 2; column += 2;
             continue;
         }
         else if (hi.starts_with("<="))
         {
-            tokens.push_back({Type::LESS_THAN_EQUAL, hi.substr(0, 2)}),
-                cursor += 2;
+            push(Type::LESS_THAN_EQUAL, hi.substr(0, 2));
+            cursor += 2; column += 2;
             continue;
         }
         else if (hi.starts_with("!="))
         {
-            tokens.push_back({Type::NOT_EQUAL, hi.substr(0, 2)}),
-                cursor += 2;
+            push(Type::NOT_EQUAL, hi.substr(0, 2));
+            cursor += 2; column += 2;
+            continue;
+        }
+        else if (hi.starts_with("->")) // try to find unique symbol
+        {
+            push(Type::ARROW, hi.substr(0, 2));
+            cursor += 2; column += 2;
             continue;
         }
 
@@ -273,15 +286,15 @@ std::vector<Token> Lexer::tokenize()
         }
         assert(symType != Type::UNKNOWN);
 
-        tokens.push_back({symType, source.substr(cursor, 1)});
+        push(symType, source.substr(cursor, 1));
         advance();
     }
 
-    tokens.push_back({Type::END, ""});
+    tokens.push_back({Type::END, "", line, column});
     return tokens;
 }
 
 std::string Token::to_string() const
 {
-    return "Token(Type: " + std::to_string(static_cast<int>(this->type)) + ", Value: \"" + std::string(this->value) + "\")";
+    return "Token(Type: " + std::to_string(static_cast<int>(this->type)) + ", Value: \"" + std::string(this->value) + "\", " + std::to_string(line) + ":" + std::to_string(column) + ")";
 }

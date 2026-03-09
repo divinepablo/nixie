@@ -80,7 +80,7 @@ class AstPrinter : public Visitor {
     }
 
 public:
-    void visit(Node& node) override {
+    void visit(Node&) override {
         indent();
         std::cout << "Node (generic)\n";
     }

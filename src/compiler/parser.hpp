@@ -30,7 +30,7 @@ class Parser
                 currentToken = tokens[position];
         }
         else
-            throw std::runtime_error("Unexpected Token at position: " + std::to_string(position) + ", " + currentToken.to_string() + ", expected " + Token{type, ""}.to_string());
+            throw std::runtime_error("Unexpected Token at " + std::to_string(currentToken.line) + ":" + std::to_string(currentToken.column) + " - " + currentToken.to_string() + ", expected " + Token{type, "", 0, 0}.to_string());
     }
 
     inline Token peek(int offset = 1) {

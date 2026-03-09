@@ -45,6 +45,7 @@ enum class Type
     GREATER_THAN_EQUAL,
     EXCLAIM,
     NOT_EQUAL,
+    ARROW,
     AT,
     HASH,
     TYPE_UNSIGNED_8,
@@ -70,6 +71,8 @@ struct Token
 {
     Type type;
     std::string_view value; // No more std::string allocations per token
+    size_t line = 0;
+    size_t column = 0;
     std::string to_string() const;
 };
 
@@ -77,6 +80,8 @@ class Lexer
 {
     std::string_view source;
     size_t cursor = 0;
+    size_t line = 1;
+    size_t column = 1;
 
 public:
     explicit Lexer(std::string_view src) : source(src) {}
@@ -86,5 +91,9 @@ private:
     void skip_whitespace_and_comments();
     constexpr bool is_eof() const { return cursor >= source.length(); }
     constexpr char peek() const { return is_eof() ? '\0' : source[cursor]; }
-    constexpr void advance() { cursor++; }
+    inline void advance() {
+        if (!is_eof() && source[cursor] == '\n') { line++; column = 1; }
+        else { column++; }
+        cursor++;
+    }
 };

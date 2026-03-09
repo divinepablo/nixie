@@ -198,7 +198,8 @@ struct MemberReferenceNode : Node
     // std::unique_ptr<Node> base;
     std::string_view base;
     std::string_view memberName;
-    explicit MemberReferenceNode(std::string_view base, std::string_view val) : /*base(std::move(base)),*/ base(base), memberName(val) {}
+    bool dereference = false; // if true, this is a -> instead of a .
+    explicit MemberReferenceNode(std::string_view base, std::string_view val, bool deref = false) : /*base(std::move(base)),*/ base(base), memberName(val), dereference(deref) {}
     void accept(Visitor &v) override { v.visit(*this); }
 };
 struct CallNode : Node

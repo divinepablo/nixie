@@ -171,6 +171,21 @@ std::unique_ptr<MemberReferenceNode> Parser::parseMemberReference()
     consume(Type::IDENTIFIER);
 
     // first ".member" is required
+    if (currentToken.type == Type::ARROW) {
+        consume(Type::ARROW);
+        if (currentToken.type != Type::IDENTIFIER)
+            throw std::runtime_error("Invalid member reference: expected identifier after '->'");
+
+        std::string_view memberName = currentToken.value;
+        consume(Type::IDENTIFIER);
+
+        return std::make_unique<MemberReferenceNode>(
+            MemberReferenceNode(baseName, memberName, true)
+        );
+    } else if (currentToken.type != Type::PERIOD) {
+        throw std::runtime_error("Invalid member reference: expected '.' or '->' after identifier");
+    }
+
     consume(Type::PERIOD);
     if (currentToken.type != Type::IDENTIFIER)
         throw std::runtime_error("Invalid member reference: expected identifier after '.'");
@@ -183,8 +198,18 @@ std::unique_ptr<MemberReferenceNode> Parser::parseMemberReference()
     );
 
     // chain: a.b.c.d ... (not supported with current AST)
-    if (currentToken.type == Type::PERIOD) { // thanks gpt
-        throw std::runtime_error("Invalid member reference: chained member access is not supported");
+    while (currentToken.type == Type::PERIOD || currentToken.type == Type::ARROW) { // thanks gpt
+        // throw std::runtime_error("Invalid member reference: chained member access is not supported on line " + std::to_string(currentToken.line) + ":" + std::to_string(currentToken.column));
+        bool deref = currentToken.type == Type::ARROW;
+        consume(currentToken.type);
+        if (currentToken.type != Type::IDENTIFIER)
+            throw std::runtime_error("Invalid member reference: expected identifier after '.' or '->'");
+
+        std::string_view nextMember = currentToken.value;
+        consume(Type::IDENTIFIER);
+        root = std::make_unique<MemberReferenceNode>(
+            MemberReferenceNode(root->base, nextMember, deref)
+        );
     }
 
     return root;
