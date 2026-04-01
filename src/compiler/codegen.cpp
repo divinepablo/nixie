@@ -908,6 +908,29 @@ void CodegenVisitor::loadIntoRegister(const EvaluationResult &source)
     }
 }
 
+void CodegenVisitor::saveRegisterToMemory(uint16_t address, uint8_t size)
+{
+    if (address < 0x100) {
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(static_cast<uint8_t>(address & 0xFF));
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        if (size > 1) { 
+            emitOp(Opcodes::STX_ZEROPAGE);
+            emit(static_cast<uint8_t>((address + 1) & 0xFF)); // shouldnt cause any issues
+            addTextReloc(RelocationType::HIGH, SegmentID::ZERO, address & 0xFF);
+        }
+    } else {
+        emitOp(Opcodes::STA_ABSOLUTE);
+        emit(static_cast<uint8_t>(address));
+        addTextReloc(RelocationType::WORD, SegmentID::DATA);
+        if (size > 1) { 
+            emitOp(Opcodes::STX_ABSOLUTE);
+            emit(static_cast<uint8_t>(address + 1)); // shouldnt cause any issues
+            addTextReloc(RelocationType::WORD, SegmentID::DATA);
+        }
+    }
+}
+
 void CodegenVisitor::pushRegister(const AstType &type)
 {
     const auto size = getSizeOfType(type);
@@ -948,8 +971,6 @@ void CodegenVisitor::emitConditionalBranch(uint8_t opcode, size_t labelId)
     emitOp(inverseOp);
     emit(0x3);
     emitJump(Opcodes::JMP_ABSOLUTE, labelId);
-    // emitOp(Opcodes::JMP_ABSOLUTE);
-    // emitWord(0x0000);
     
 }
 
@@ -1135,91 +1156,89 @@ void CodegenVisitor::visit(UnaryNode &node)
         emit(0x01);
         break;
     }
-    // case UnaryOperator::REFERENCE: {
-    //     // Taking the address of a value - result is a pointer
-    //     // The result.value already contains the offset/address from the ReferenceNode visitor
-    //     if (result.location == ValueLocation::DataSegment || 
-    //         result.location == ValueLocation::Immediate) {
-    //         // For global data segment variables, result.value is the offset in data segment
-    //         evalStack.push(EvaluationResult {ValueLocation::Immediate, result.value, AstType::PointerTo(result.type)});
-    //     } else if (result.location == ValueLocation::Accumulator) {
-    //         // The address was loaded into A (and possibly X for 16-bit)
-    //         // This typically happens for zero page or other already-computed addresses
-    //         evalStack.push(EvaluationResult {ValueLocation::Accumulator, result.value, AstType::PointerTo(result.type)});
-    //     } else {
-    //         throw std::runtime_error("Cannot take reference of this value location");
-    //     }
-    //     break;
-    // }
-        case UnaryOperator::DEREFERENCE: {
-        // For dereference, we need to preserve the pointer value itself
-        // so it can be used for both reading and writing
-        // The result type needs to have its pointer level decremented
-        AstType dereferenced = result.type.decayPointer();
-        
-        // STRING is an implicit pointer to byte data; dereferencing yields u8
-        if (dereferenced.kind == TypeKind::STRING && dereferenced.pointerLevel == 0) {
-            dereferenced = AstType::Primitive(TypeKind::UNSIGNED_8);
-        }
-        
-        auto temp = getZeroPageAllocation("__temporary_2p").value().address;
-        
-        if (result.location == ValueLocation::Immediate) {
-            // Pointer is a constant address - load it into zero page temp
-            emitOp(Opcodes::LDA_IMMEDIATE);
-            emit(result.value & 0xFF);
-            emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp);
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-            
-            emitOp(Opcodes::LDA_IMMEDIATE);
-            emit((result.value >> 8) & 0xFF);
-            emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp + 1);                            // temp+1 is second byte of temp (zp address)
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
-            
-            evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
-                            static_cast<uint32_t>(temp), 
-                            dereferenced});
-        } else if (result.location == ValueLocation::DataSegment) {
-            // Pointer is stored in data segment - load pointer value into temp
-            emitOp(Opcodes::LDA_ABSOLUTE);
-            emitWord(static_cast<uint16_t>(result.value));
-            addTextReloc(RelocationType::WORD, SegmentID::DATA);
-            emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp);
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-            
-            emitOp(Opcodes::LDA_ABSOLUTE);
-            emitWord(static_cast<uint16_t>(result.value + 1));
-            addTextReloc(RelocationType::WORD, SegmentID::DATA);
-            emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp + 1);                            // temp+1 is second byte of temp (zp address)
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
-            
-            evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
-                            static_cast<uint32_t>(temp), 
-                            dereferenced});
-        } else if (result.location == ValueLocation::Accumulator) {
-            // Pointer value is already in A (low) and X (high)
-            emitOp(Opcodes::STA_ZEROPAGE);
-            emit(temp);                                // temp byte 0 (low byte of pointer)
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-            emitOp(Opcodes::STX_ZEROPAGE);
-            emit(temp + 1);                            // temp byte 1 (high byte of pointer, zp address)
-            addTextReloc(RelocationType::LOW, SegmentID::ZERO);  // ZP addresses are 8-bit, use LOW
-            
-            evalStack.push(EvaluationResult {ValueLocation::DereferencedPointer, 
-                            static_cast<uint32_t>(temp), 
-                            dereferenced});
-        } else {
-            throw std::runtime_error("Cannot dereference this value location");
-        }
+    case UnaryOperator::DEREFERENCE: {
+        dereferencePointer(result);
         break;
     }
         
-        default:
-        break;
+    default:
+    break;
+    }
+}
+
+void CodegenVisitor::dereferencePointer(EvaluationResult &result)
+{
+    
+    // For dereference, we need to preserve the pointer value itself
+    // so it can be used for both reading and writing
+    // The result type needs to have its pointer level decremented
+    AstType dereferenced = result.type.decayPointer();
+
+    // STRING is an implicit pointer to byte data; dereferencing yields u8
+    if (dereferenced.kind == TypeKind::STRING && dereferenced.pointerLevel == 0)
+    {
+        dereferenced = AstType::Primitive(TypeKind::UNSIGNED_8);
+    }
+
+    auto temp = getZeroPageAllocation("__temporary_2p").value().address;
+
+    if (result.location == ValueLocation::Immediate)
+    {
+        // Pointer is a constant address - load it into zero page temp
+        emitOp(Opcodes::LDA_IMMEDIATE);
+        emit(result.value & 0xFF);
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+        emitOp(Opcodes::LDA_IMMEDIATE);
+        emit((result.value >> 8) & 0xFF);
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp + 1);                                     // temp+1 is second byte of temp (zp address)
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO); // ZP addresses are 8-bit, use LOW
+
+        evalStack.push(EvaluationResult{ValueLocation::DereferencedPointer,
+                                        static_cast<uint32_t>(temp),
+                                        dereferenced});
+    }
+    else if (result.location == ValueLocation::DataSegment)
+    {
+        // Pointer is stored in data segment - load pointer value into temp
+        emitOp(Opcodes::LDA_ABSOLUTE);
+        emitWord(static_cast<uint16_t>(result.value));
+        addTextReloc(RelocationType::WORD, SegmentID::DATA);
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp);
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+        emitOp(Opcodes::LDA_ABSOLUTE);
+        emitWord(static_cast<uint16_t>(result.value + 1));
+        addTextReloc(RelocationType::WORD, SegmentID::DATA);
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp + 1);                                     // temp+1 is second byte of temp (zp address)
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO); // ZP addresses are 8-bit, use LOW
+
+        evalStack.push(EvaluationResult{ValueLocation::DereferencedPointer,
+                                        static_cast<uint32_t>(temp),
+                                        dereferenced});
+    }
+    else if (result.location == ValueLocation::Accumulator)
+    {
+        // Pointer value is already in A (low) and X (high)
+        emitOp(Opcodes::STA_ZEROPAGE);
+        emit(temp); // temp byte 0 (low byte of pointer)
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+        emitOp(Opcodes::STX_ZEROPAGE);
+        emit(temp + 1);                                     // temp byte 1 (high byte of pointer, zp address)
+        addTextReloc(RelocationType::LOW, SegmentID::ZERO); // ZP addresses are 8-bit, use LOW
+
+        evalStack.push(EvaluationResult{ValueLocation::DereferencedPointer,
+                                        static_cast<uint32_t>(temp),
+                                        dereferenced});
+    }
+    else
+    {
+        throw std::runtime_error("Cannot dereference this value location");
     }
 }
 
@@ -1330,11 +1349,12 @@ void CodegenVisitor::visit(AssignmentNode &node)
             uint32_t memberOffset = calculateMemberOffset(symbol.type.decayPointer(), member);
             pushRegister(exprResult.type);
             loadVariableToRegister(symbol);
-            
-        } else 
-            {saveRegisterToVariable(symbol, member);}
+            saveRegisterToMemory(temp, 2);
+        } else {
+            saveRegisterToVariable(symbol, member);
+        }
     }
-}
+}   
 
 void CodegenVisitor::visit(BinaryOperationNode &node)
 {
@@ -1640,94 +1660,14 @@ void CodegenVisitor::visit(FunctionNode &node)
         
         if (node.isInterrupt()) { 
             // Save registers for interrupt handler
-            if (node.interruptType == InterruptType::RESET) 
-            {
-                auto temp = getZeroPageAllocation("__temporary").value().address;
-                auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
-
-                // source
-                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_SORC__", RelocationType::LOW);
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_SORC__", RelocationType::HIGH);
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp);
-
-                // destination
-                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::LOW);
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::HIGH);
-                emitOp(Opcodes::STA_ZEROPAGE);
-                emit(temp2 + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
-
-                loadUndefinedConstant(Opcodes::LDX_IMMEDIATE, "__DATA_SIZE__", RelocationType::HIGH); // full page count
-                
-                auto remaindereded = createLabel("check_remaindered");
-                emitJump(Opcodes::BEQ, remaindereded);
-
-                emitOp(Opcodes::LDY_IMMEDIATE);
-                emit(0x00);
-
-                auto pageCopyLoop = createLabel("page_copy_loop");
-
-                emitLabel(pageCopyLoop);
-
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-
-                emitOp(Opcodes::INY);
-                emitJump(Opcodes::BNE, pageCopyLoop);
-
-                emitOp(Opcodes::INC_ZEROPAGE);
-                emit(temp + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp);
-                emitOp(Opcodes::INC_ZEROPAGE);
-                emit(temp2 + 1);
-                addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
-
-                emitOp(Opcodes::DEX);
-                emitJump(Opcodes::BNE, pageCopyLoop);
-
-                emitLabel(remaindereded);
-
-                loadUndefinedConstant(Opcodes::LDX_IMMEDIATE, "__DATA_SIZE__", RelocationType::LOW); // remainder bytes
-                auto done = createLabel("done_data_copy");
-                emitJump(Opcodes::BEQ, done);
-
-                emitOp(Opcodes::LDY_IMMEDIATE);
-                emit(0x00);
-
-                auto remainder_loop = createLabel("remainder_loop");
-                emitLabel(remainder_loop);
-
-                emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
-                emit(temp);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
-                emit(temp2);
-                addTextReloc(RelocationType::LOW, SegmentID::ZERO);
-                emitOp(Opcodes::INY);
-                emitOp(Opcodes::DEX);
-                emitJump(Opcodes::BNE, remainder_loop);
-                emitLabel(done);
-            } else
+            if (node.interruptType != InterruptType::RESET) 
             {
                 emitOp(Opcodes::PHA);
                 emitOp(Opcodes::PHX);
                 emitOp(Opcodes::PHY);
+            } else {
+                emitJump(Opcodes::JSR, dataCopy);
             }
-            
         } 
         else {
             emitPrologue(frameSize);
@@ -2206,6 +2146,7 @@ const std::vector<uint8_t> CodegenVisitor::buildHeaderOptions()
 
 std::vector<uint8_t> CodegenVisitor::generateO65()
 {
+    emitDataCopy();
     // std::vector<uint8_t> o65Data;
     implementation_defined::O65_File_Layout layout;
     O65_Header_16 header16{};
@@ -2241,6 +2182,8 @@ std::vector<uint8_t> CodegenVisitor::generateO65()
             header16.mode = layout.mode.encode();
         }
     }
+
+
     
     layout.text_data = textSegment.data();
     layout.data_data = dataSegment.data();
@@ -3142,6 +3085,95 @@ void CodegenVisitor::storeStackVariable(int32_t offset, size_t size)
             addTextReloc(RelocationType::LOW, SegmentID::ZERO);
         }
     }
+}
+
+void CodegenVisitor::emitDataCopy()
+{
+    auto temp = getZeroPageAllocation("__temporary").value().address;
+    auto temp2 = getZeroPageAllocation("__temporary_2p").value().address;
+    emitLabel(dataCopy);
+    SymbolInfo symbol{"__data_copy", AstType::Primitive(TypeKind::UNKNOWN), StorageClass::Global, static_cast<int32_t>(textSegment.size()), true, false, 2};
+
+    exportedGlobals.push_back(std::make_pair(symbol.name, static_cast<int32_t>(textSegment.size())));
+    scopes.back().symbols.emplace(std::make_pair(symbol.name, symbol));
+
+    // source
+    loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_SORC__", RelocationType::LOW);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(temp);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+    loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_SORC__", RelocationType::HIGH);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(temp + 1);
+    addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp);
+
+    // destination
+    loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::LOW);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(temp2);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+    loadUndefinedConstant(Opcodes::LDA_IMMEDIATE, "__DATA_DEST__", RelocationType::HIGH);
+    emitOp(Opcodes::STA_ZEROPAGE);
+    emit(temp2 + 1);
+    addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
+
+    loadUndefinedConstant(Opcodes::LDX_IMMEDIATE, "__DATA_SIZE__", RelocationType::HIGH); // full page count
+    
+    auto remaindereded = createLabel("check_remaindered");
+    emitJump(Opcodes::BEQ, remaindereded);
+
+    emitOp(Opcodes::LDY_IMMEDIATE);
+    emit(0x00);
+
+    auto pageCopyLoop = createLabel("page_copy_loop");
+
+    emitLabel(pageCopyLoop);
+
+    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+    emit(temp);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+    emit(temp2);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+
+    emitOp(Opcodes::INY);
+    emitJump(Opcodes::BNE, pageCopyLoop);
+
+    emitOp(Opcodes::INC_ZEROPAGE);
+    emit(temp + 1);
+    addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp);
+    emitOp(Opcodes::INC_ZEROPAGE);
+    emit(temp2 + 1);
+    addTextReloc(RelocationType::HIGH, SegmentID::ZERO, temp2);
+
+    emitOp(Opcodes::DEX);
+    emitJump(Opcodes::BNE, pageCopyLoop);
+
+    emitLabel(remaindereded);
+
+    loadUndefinedConstant(Opcodes::LDX_IMMEDIATE, "__DATA_SIZE__", RelocationType::LOW); // remainder bytes
+    auto done = createLabel("done_data_copy");
+    emitJump(Opcodes::BEQ, done);
+
+    emitOp(Opcodes::LDY_IMMEDIATE);
+    emit(0x00);
+
+    auto remainder_loop = createLabel("remainder_loop");
+    emitLabel(remainder_loop);
+
+    emitOp(Opcodes::LDA_ZEROPAGE_INDIRECT_Y);
+    emit(temp);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::STA_ZEROPAGE_INDIRECT_Y);
+    emit(temp2);
+    addTextReloc(RelocationType::LOW, SegmentID::ZERO);
+    emitOp(Opcodes::INY);
+    emitOp(Opcodes::DEX);
+    emitJump(Opcodes::BNE, remainder_loop);
+    emitLabel(done);
+    emitOp(Opcodes::RTS);
 }
 
 void CodegenVisitor::visit(ReturnNode &node)

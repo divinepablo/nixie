@@ -252,6 +252,7 @@ private:
     std::optional<SymbolInfo> currentFunction;
     int currentStackDepth = 0; // Tracks generic stack usage (pushes/pops)
     bool currentFunctionIsInterrupt = false; // For proper epilogue generation
+    
 
     ZeroPageAllocator zeroPageAllocator;
     
@@ -377,6 +378,8 @@ private:
     // Purpose: Ensures the value is in A (8-bit) or A/X (16-bit) for processing.
     // Called when: Preparing operands for BinaryOp/Call/Assignment.
 
+    void saveRegisterToMemory(uint16_t address, uint8_t size);
+
     // Push a register value onto the CPU hardware stack
     void pushRegister(const AstType& type);
     // Purpose: Emits PHA (and PHX/PHY) depending on type size.
@@ -437,6 +440,12 @@ private:
     
     // Store accumulator to stack variable
     void storeStackVariable(int32_t offset, size_t size);
+
+    void emitDataCopy();
+    int dataCopy = createLabel("__data_copy");
+
+    // leaves the dereference at __temporary_2p
+    void dereferencePointer(EvaluationResult &result);
 
 public:
     CodegenVisitor() {
